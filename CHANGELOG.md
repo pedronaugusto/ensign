@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Help measures text in the columns a terminal gives it, through xenoglyph: a CJK description takes two columns a character, a combining mark none, so wide text wraps and aligns where it is drawn. It counted one column a code point.
+
 ## [0.1.0] - 2026-10-13
 
 ### Added

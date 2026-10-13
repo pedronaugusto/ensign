@@ -4,7 +4,12 @@
     .minimum_zig_version = "0.17.0",
     .fingerprint = 0x71c3b8840f13e3e9,
     .paths = .{ "build.zig", "build.zig.zon", "src", "README.md", "CHANGELOG.md", "LICENSE" },
-    .dependencies = .{},
+    .dependencies = .{
+        .xenoglyph = .{
+            .url = "git+https://github.com/pedronaugusto/xenoglyph?ref=v0.1.0#8b0c9ada1370f6b5486fd67a0574ff868cd2c22e",
+            .hash = "xenoglyph-0.1.0-YKXZlVeSCwCPKxKxDurTq6iO0bksf3zwe9X_Fc92KSF0",
+        },
+    },
     .dev_dependencies = .{
         .preflight = .{
             .url = "git+https://github.com/pedronaugusto/preflight?ref=v0.4.3#91c42412fed03aa24dfafb5061aee53875f47e02",

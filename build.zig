@@ -5,7 +5,9 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const module = b.addModule("ensign", .{ .root_source_file = b.path("src/ensign.zig"), .target = target, .optimize = optimize });
+    // Text in help is measured in the columns a terminal gives it: xenoglyph's widths.
+    const xenoglyph = b.dependency("xenoglyph", .{ .target = target, .optimize = optimize }).module("xenoglyph");
+    const module = b.addModule("ensign", .{ .root_source_file = b.path("src/ensign.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "xenoglyph", .module = xenoglyph }} });
     b.installArtifact(b.addLibrary(.{ .name = "ensign", .root_module = module }));
 }
 
@@ -28,12 +30,16 @@ pub fn dev(b: *std.Build, tools: type) void {
             .root_source_file = p.path("src/tests.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{.{ .name = "shakedown", .module = shakedown.module("shakedown") }},
+            .imports = &.{ .{ .name = "shakedown", .module = shakedown.module("shakedown") }, .{ .name = "xenoglyph", .module = p.dependency("xenoglyph", .{ .target = target, .optimize = optimize }).module("xenoglyph") } },
         }),
     });
     const check = b.step("check", "Compile the tests, library, example and benchmarks without running them");
     const test_step = b.step("test", "Run the tests and example");
-    test_step.dependOn(&b.addRunArtifact(tests).step);
+    const unit_run = b.addRunArtifact(tests);
+    test_step.dependOn(&unit_run.step);
+    // The suite alone, every binary of it holding properties: what the
+    // hardened profile fuzzes.
+    b.step("unit", "Run the ensign suite alone").dependOn(&unit_run.step);
     check.dependOn(&tests.step);
     check.dependOn(&library.step);
 
@@ -81,6 +87,9 @@ pub fn dev(b: *std.Build, tools: type) void {
     tools.preflight.addCi(b, p, .{
         .tests = test_step,
         .portable_tests = true,
+        // The release tier runs the suite with safety on, fuzzes its
+        // properties and runs it under ThreadSanitizer.
+        .hardened = .{ .fuzz_step = "unit", .tsan_step = "unit" },
         .bench = .{
             .programs = &.{.{ .name = "parse", .source = "bench/parse.zig" }},
             .imports = benchImports,
@@ -90,7 +99,7 @@ pub fn dev(b: *std.Build, tools: type) void {
     });
     // A project that depends on ensign by path, with no packages to fetch:
     // the build a consumer gets.
-    tools.preflight.addConsumerCheck(b, p, .{ .package = "ensign", .program = p.path("ci/consumer.zig"), .modules = &.{"ensign"} });
+    tools.preflight.addConsumerCheck(b, p, .{ .package = "ensign", .program = p.path("ci/consumer.zig"), .modules = &.{"ensign"}, .packages = &.{p.dependency("xenoglyph", .{ .target = target, .optimize = optimize })} });
 }
 
 /// Each rejected declaration and how its compile error ends.
@@ -111,7 +120,6 @@ const rejected = [_]struct { name: []const u8, error_text: []const u8 }{
 /// its own mode, so a ReleaseFast benchmark over the Debug module would time
 /// the Debug module. `b` is the development build.
 fn benchImports(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.Optimize) []const std.Build.Module.Import {
-    const p = b.dependency("ensign", .{ .target = target, .optimize = optimize }).builder;
-    const ensign = b.createModule(.{ .root_source_file = p.path("src/ensign.zig"), .target = target, .optimize = optimize });
+    const ensign = b.dependency("ensign", .{ .target = target, .optimize = optimize }).module("ensign");
     return b.allocator.dupe(std.Build.Module.Import, &.{.{ .name = "ensign", .module = ensign }}) catch @panic("OOM");
 }

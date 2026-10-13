@@ -2,6 +2,7 @@
 //! break, and which known name is closest to a mistyped one.
 const std = @import("std");
 const Writer = std.Io.Writer;
+const xenoglyph = @import("xenoglyph");
 
 /// Writes `bytes` so a terminal shows them as they are: printable UTF-8
 /// stays; control characters, bidirectional controls and bytes that are not
@@ -43,19 +44,11 @@ fn formatEscaped(bytes: []const u8, w: *Writer) Writer.Error!void {
     return writeEscaped(w, bytes);
 }
 
-/// Columns `bytes` take: one per code point, and one per byte that is not UTF-8.
+/// Columns `bytes` take in a terminal: the sum of its grapheme clusters', as
+/// xenoglyph measures them (a CJK ideograph 2, a combining mark 0, an emoji
+/// 2, a control 0).
 pub fn width(bytes: []const u8) usize {
-    var n: usize = 0;
-    var i: usize = 0;
-    while (i < bytes.len) : (n += 1) {
-        const len = std.unicode.utf8ByteSequenceLength(bytes[i]) catch 1;
-        if (len > 1 and i + len <= bytes.len and std.unicode.utf8ValidateSlice(bytes[i..][0..len])) {
-            i += len;
-            continue;
-        }
-        i += 1;
-    }
-    return n;
+    return xenoglyph.width.string(bytes, .{});
 }
 
 /// How far compile-time reading of a declaration may go: a declaration of
@@ -132,7 +125,7 @@ pub fn wrap(w: *Writer, text: []const u8, indent: usize, column: usize, limit: u
         var words = std.mem.tokenizeScalar(u8, line, ' ');
         var first_word = true;
         while (words.next()) |word| {
-            const wide = width(word);
+            const wide = wordWidth(word);
             if (col < indent) {
                 try w.splatByteAll(' ', indent - col);
                 col = indent;
@@ -156,6 +149,14 @@ pub fn wrap(w: *Writer, text: []const u8, indent: usize, column: usize, limit: u
 
 /// Joins two words `wrap` keeps on one line; it is written as a space.
 pub const glue = "\x1f";
+
+/// A word's columns as `writeWord` writes it: each glue is a space.
+fn wordWidth(word: []const u8) usize {
+    var parts = std.mem.splitScalar(u8, word, glue[0]);
+    var wide = width(parts.first());
+    while (parts.next()) |part| wide += 1 + width(part);
+    return wide;
+}
 
 fn writeWord(w: *Writer, word: []const u8) Writer.Error!void {
     var parts = std.mem.splitScalar(u8, word, glue[0]);
@@ -202,4 +203,23 @@ test "distance" {
     try std.testing.expectEqual(@as(?usize, 0), distance("same", "same"));
     try std.testing.expectEqual(@as(?usize, null), close("x", "y"));
     try std.testing.expectEqual(@as(?usize, 1), close("colr", "color"));
+}
+
+test "width is the columns a terminal gives" {
+    try std.testing.expectEqual(@as(usize, 4), width("日本"));
+    try std.testing.expectEqual(@as(usize, 1), width("e\u{301}"));
+    try std.testing.expectEqual(@as(usize, 2), width("👍🏽"));
+    try std.testing.expectEqual(@as(usize, 6), comptime width("--jobs"));
+}
+
+test "wrap measures wide words and counts glue as a space" {
+    var buffer: [64]u8 = undefined;
+    var w: Writer = .fixed(&buffer);
+    // 日本語 is six columns: past "  a " it would end at ten, so it breaks at
+    // seven, and so does "b" after it.
+    try std.testing.expectEqual(@as(usize, 3), try wrap(&w, "a 日本語 b", 2, 0, 7));
+    try std.testing.expectEqualStrings("  a\n  日本語\n  b", w.buffered());
+    w = .fixed(&buffer);
+    try std.testing.expectEqual(@as(usize, 12), try wrap(&w, "[default:" ++ glue ++ "1]", 0, 0, 80));
+    try std.testing.expectEqualStrings("[default: 1]", w.buffered());
 }

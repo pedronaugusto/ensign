@@ -26,6 +26,7 @@ const package_references = [_]gantry.rules.ReferenceRule{
         "std",
         "builtin",
         "shakedown",
+        "xenoglyph",
     } },
     .{ .name = "source siblings", .suffix = ".zig", .relative = true, .except_targets = &.{"src/**"} },
 };
