@@ -90,7 +90,7 @@ fn walk(comptime T: type, comptime path: []const u8, comptime inherited: []const
     }
     var subs: []const Sub = &.{};
     var below: []const Node = &.{};
-    if (i.commands) |c| for (c.list) |sub| {
+    if (i.commands) |c| for (c.list) |sub| if (!sub.external) {
         const child = if (path.len == 0) sub.name else path ++ " " ++ sub.name;
         const help = if (sub.meta.help.len != 0) sub.meta.help else if (sub.Payload == void) "" else model.info(sub.Payload).specOf().about;
         subs = subs ++ .{Sub{ .name = sub.name, .aliases = sub.aliases, .help = firstLine(help), .hidden = sub.meta.hidden, .path = child }};

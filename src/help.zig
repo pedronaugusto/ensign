@@ -162,7 +162,7 @@ fn pageRows(comptime chain: []const type) []const Row {
 
 fn commandLine(comptime sub: model.Sub) []const u8 {
     if (sub.meta.help.len != 0) return sub.meta.help;
-    if (sub.Payload == void) return "";
+    if (sub.Payload == void or sub.external) return "";
     const about = model.info(sub.Payload).specOf().about;
     return about[0 .. std.mem.findScalar(u8, about, '\n') orelse about.len];
 }

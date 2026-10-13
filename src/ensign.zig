@@ -17,6 +17,7 @@ pub const Example = spec.Example;
 pub const Section = spec.Section;
 pub const Flag = spec.Flag;
 pub const Hint = spec.Hint;
+pub const External = spec.External;
 
 pub const Error = parser.Error;
 pub const Options = parser.Options;

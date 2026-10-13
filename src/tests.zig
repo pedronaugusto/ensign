@@ -10,4 +10,5 @@ test {
     _ = @import("testing/property_test.zig");
     _ = @import("testing/complete_test.zig");
     _ = @import("testing/aegis_test.zig");
+    _ = @import("testing/wrapper_test.zig");
 }

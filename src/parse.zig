@@ -4,6 +4,7 @@
 //! its own branch.
 const std = @import("std");
 const model = @import("model.zig");
+const spec = @import("spec.zig");
 const text = @import("text.zig");
 const kinds = @import("kinds.zig");
 const value = @import("value.zig");
@@ -173,7 +174,9 @@ fn freeCommand(comptime T: type, gpa: Allocator, v: *const T) void {
     if (commands) |c| {
         const u = if (c.optional) (@field(v, c.field) orelse return) else @field(v, c.field);
         switch (u) {
-            inline else => |*payload| if (@TypeOf(payload.*) != void) free(@TypeOf(payload.*), gpa, payload),
+            inline else => |*payload| if (@TypeOf(payload.*) == spec.External) {
+                if (payload.args.len != 0) gpa.free(payload.args);
+            } else if (@TypeOf(payload.*) != void) free(@TypeOf(payload.*), gpa, payload),
         }
     }
 }
@@ -264,7 +267,7 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
         const subs = blk: {
             @setEvalBranchQuota(text.branch_quota);
             var kvs: []const lookup.Entry = &.{};
-            if (info.commands) |c| for (c.list, 0..) |sub, n| for (.{sub.name} ++ sub.aliases) |name| {
+            if (info.commands) |c| for (c.list, 0..) |sub, n| if (!sub.external) for (.{sub.name} ++ sub.aliases) |name| {
                 kvs = kvs ++ .{.{ name, n }};
             };
             break :blk lookup.Table(kvs);
@@ -291,13 +294,32 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
             break :blk any;
         };
 
+        /// The last positional, when it takes the rest of the arguments as given.
+        const raw: ?model.Opt = blk: {
+            const n = info.positionals.len;
+            break :blk if (n != 0 and info.positionals[n - 1].meta.raw) info.positionals[n - 1] else null;
+        };
+
+        /// Whether an argument this command does not read as its own begins
+        /// the raw arguments: every positional before them is taken.
+        fn rawNext(self: *const Self) bool {
+            return raw != null and self.positional >= raw.?.index;
+        }
+
+        /// `first`, then every argument left, into the raw positional as given.
+        fn takeRaw(self: *Self, st: *State, cursor: anytype, first: []const u8) Error!void {
+            const p = raw.?;
+            try self.append(st, p, first, null);
+            while (cursor.next()) |arg| try self.append(st, p, arg, null);
+        }
+
         fn run(self: *Self, st: *State, cursor: anytype) (Error || Request)!void {
             st.page = &Pg.page;
             defer inline for (@typeInfo(Lists).@"struct".field_names) |name| @field(self.lists, name).deinit(st.gpa);
             var only_positionals = false;
             while (cursor.next()) |arg| {
                 if (only_positionals) {
-                    try self.positionalArg(st, arg);
+                    try self.positionalArg(st, cursor, arg);
                 } else if (std.mem.eql(u8, arg, "--")) {
                     only_positionals = true;
                 } else if (std.mem.startsWith(u8, arg, "--")) {
@@ -309,7 +331,7 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
                     errdefer self.releaseCommand(st);
                     return self.finish(st);
                 } else {
-                    try self.positionalArg(st, arg);
+                    try self.positionalArg(st, cursor, arg);
                 }
             }
             return self.finish(st);
@@ -331,6 +353,7 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
             }
             if (s.help) |f| if (std.mem.eql(u8, name, f.long)) return self.request(st, attached, spelled, error.HelpRequested);
             if (info.version()) |f| if (std.mem.eql(u8, name, f.long)) return self.request(st, attached, spelled, error.VersionRequested);
+            if (self.rawNext()) return self.takeRaw(st, cursor, arg);
             var nearest: text.Nearest = .{ .typed = spelled };
             self.considerLongs(&nearest, false);
             return st.fail(error.UnknownOption, .{ .problem = .unknown_option, .argument = spelled, .suggestion = nearest.best });
@@ -396,6 +419,7 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
                     }
                     if (s.help) |f| if (f.short == c) return self.request(st, null, "", error.HelpRequested);
                     if (info.version()) |f| if (f.short == c) return self.request(st, null, "", error.VersionRequested);
+                    if (k == 1 and self.rawNext()) return self.takeRaw(st, cursor, arg);
                     return st.fail(error.UnknownOption, .{ .problem = .unknown_option, .argument = &dashes[c] });
                 };
                 if (try self.applyShortIndex(st, cursor, index, c, rest)) return;
@@ -490,9 +514,11 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
             return if (o.positional) help.positional(o) else "--" ++ o.long;
         }
 
-        fn positionalArg(self: *Self, st: *State, arg: []const u8) Error!void {
+        fn positionalArg(self: *Self, st: *State, cursor: anytype, arg: []const u8) Error!void {
             const n = info.positionals.len;
-            if (n == 0) return unexpectedArgument(st, arg) else return self.positionalAt(st, arg);
+            if (n == 0) return unexpectedArgument(st, arg);
+            if (self.rawNext()) return self.takeRaw(st, cursor, arg);
+            return self.positionalAt(st, arg);
         }
 
         fn positionalAt(self: *Self, st: *State, arg: []const u8) Error!void {
@@ -520,6 +546,7 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
         fn command(self: *Self, st: *State, cursor: anytype, arg: []const u8) (Error || Request)!void {
             const c = info.commands.?;
             const index = subs.get(arg) orelse {
+                if (comptime c.external()) |ext| return self.external(st, cursor, ext, arg);
                 var nearest: text.Nearest = .{ .typed = arg };
                 inline for (c.list) |sub| if (!sub.meta.hidden) {
                     inline for (.{sub.name} ++ sub.aliases) |name| nearest.consider(name);
@@ -529,15 +556,28 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
             switch (index) {
                 inline 0...c.list.len - 1 => |i| {
                     const sub = c.list[i];
-                    const P = if (sub.Payload == void) Bare(sub.meta.help) else sub.Payload;
-                    var payload: P = defaults(P);
-                    var child: Frame(chain ++ .{P}, names ++ .{sub.name}, Self) = .{ .out = &payload, .parent = self };
-                    try child.run(st, cursor);
-                    @field(self.out, c.field) = @unionInit(c.Union, sub.tag, if (sub.Payload == void) {} else payload);
-                    self.chose = true;
+                    if (sub.external) unreachable else { // unreachable: the table holds no external variant
+                        const P = if (sub.Payload == void) Bare(sub.meta.help) else sub.Payload;
+                        var payload: P = defaults(P);
+                        var child: Frame(chain ++ .{P}, names ++ .{sub.name}, Self) = .{ .out = &payload, .parent = self };
+                        try child.run(st, cursor);
+                        @field(self.out, c.field) = @unionInit(c.Union, sub.tag, if (sub.Payload == void) {} else payload);
+                        self.chose = true;
+                    }
                 },
                 else => unreachable, // unreachable: the table holds only this command's variants
             }
+        }
+
+        /// The external subcommand `ext`, named `name`, with every argument left as given.
+        fn external(self: *Self, st: *State, cursor: anytype, comptime ext: model.Sub, name: []const u8) Error!void {
+            const c = info.commands.?;
+            var args: std.ArrayList([]const u8) = .empty;
+            errdefer args.deinit(st.gpa);
+            while (cursor.next()) |arg| try args.append(st.gpa, arg);
+            const owned: []const []const u8 = if (args.items.len == 0) &.{} else try args.toOwnedSlice(st.gpa);
+            @field(self.out, c.field) = @unionInit(c.Union, ext.tag, .{ .name = name, .args = owned });
+            self.chose = true;
         }
 
         fn releaseCommand(self: *Self, st: *State) void {

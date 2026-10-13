@@ -63,6 +63,8 @@ pub const Sub = struct {
     meta: spec.Command,
     /// The variant's payload: a struct, or void for a command with no arguments.
     Payload: type,
+    /// Its payload is `spec.External`: it takes any name no other variant has.
+    external: bool,
 };
 
 /// A command's subcommands: the field holding them and its variants.
@@ -72,6 +74,12 @@ pub const Subs = struct {
     /// The field is `?Union`: no subcommand is allowed.
     optional: bool,
     list: []const Sub,
+
+    /// The variant that takes names no other has, if one does.
+    pub fn external(comptime c: Subs) ?Sub {
+        for (c.list) |sub| if (sub.external) return sub;
+        return null;
+    }
 };
 
 /// Everything the parser, help and completions read about a command.
@@ -149,13 +157,21 @@ fn subsOf(comptime T: type, comptime field: [:0]const u8, comptime F: type, comp
     if (!optional and attrs.default_value_ptr != null) @compileError("ensign: " ++ @typeName(T) ++ "." ++ field ++ ": a required subcommand has no default; make the field optional");
     const u = @typeInfo(U).@"union";
     var list: []const Sub = &.{};
+    var externals = 0;
     for (u.field_names, u.field_types) |tag, P| {
         if (P != void and @typeInfo(P) != .@"struct") @compileError("ensign: subcommand " ++ tag ++ " of " ++ @typeName(T) ++ " holds a " ++ @typeName(P) ++ "; a subcommand holds a struct or nothing");
         const meta = @field(s.commands, tag);
-        const name = meta.name orelse text.dashed(tag);
-        checkName(T, name, "subcommand");
+        const external = P == spec.External;
+        if (external) {
+            externals += 1;
+            if (externals > 1) @compileError("ensign: " ++ @typeName(T) ++ "." ++ field ++ " has two external subcommands; a command has at most one");
+            if (meta.aliases.len != 0) @compileError("ensign: " ++ @typeName(T) ++ "." ++ tag ++ ": an external subcommand takes any name, so it has no aliases");
+        }
+        // An external subcommand's name is how help shows it, such as `<step>`.
+        const name = meta.name orelse if (external) "<" ++ text.dashed(tag) ++ ">" else text.dashed(tag);
+        if (!external) checkName(T, name, "subcommand");
         for (meta.aliases) |alias| checkName(T, alias, "subcommand alias");
-        list = list ++ .{Sub{ .tag = tag, .name = name, .aliases = meta.aliases, .meta = meta, .Payload = P }};
+        list = list ++ .{Sub{ .tag = tag, .name = name, .aliases = meta.aliases, .meta = meta, .Payload = P, .external = external }};
     }
     if (list.len == 0) @compileError("ensign: " ++ @typeName(T) ++ "." ++ field ++ " has no subcommands");
     return .{ .field = field, .Union = U, .optional = optional, .list = list };
@@ -184,6 +200,10 @@ fn option(comptime T: type, comptime name: [:0]const u8, comptime F: type, compt
     }
     if (kind != .flag and kind != .count) checkValue(where, Value);
     if (meta.delimiter != null and kind != .list) @compileError("ensign: " ++ where ++ ": a delimiter splits list values; the field is no list");
+    if (meta.raw) {
+        if (!meta.positional or kind != .list or kinds.of(Value) != .text) @compileError("ensign: " ++ where ++ ": raw arguments are a positional list of text, []const []const u8");
+        if (meta.delimiter != null) @compileError("ensign: " ++ where ++ ": raw arguments are taken as given; a delimiter would split them");
+    }
     if (meta.positional) {
         if (kind == .flag or kind == .count) @compileError("ensign: " ++ where ++ ": a positional takes a value; a flag or count cannot be one");
         if (meta.short != null or meta.long != null or meta.aliases.len != 0) @compileError("ensign: " ++ where ++ ": a positional has no option names");
@@ -291,7 +311,7 @@ fn validate(comptime i: Info) void {
     }
     if (i.commands) |c| {
         var names: []const []const u8 = &.{};
-        for (c.list) |sub| for (.{sub.name} ++ sub.aliases) |name| {
+        for (c.list) |sub| if (!sub.external) for (.{sub.name} ++ sub.aliases) |name| {
             for (names) |seen| if (std.mem.eql(u8, seen, name)) @compileError("ensign: " ++ where ++ ": subcommand " ++ name ++ " is named twice");
             names = names ++ .{name};
         };

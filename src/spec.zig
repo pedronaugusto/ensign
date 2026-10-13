@@ -47,6 +47,11 @@ pub const Option = struct {
     hint: Hint = .none,
     /// The heading this option is listed under in help; "Options" when null.
     section: ?[]const u8 = null,
+    /// For the last positional, a list of text: from the first argument this
+    /// command does not read as one of its options, every argument as it is,
+    /// dashes and `--` included, as a program that wraps another passes them
+    /// on (`bay build -Doptimize=ReleaseSafe`). A `--` before them is dropped.
+    raw: bool = false,
 };
 
 /// A subcommand's spelling and its line in its parent's help.
@@ -60,6 +65,17 @@ pub const Command = struct {
     aliases: []const []const u8 = &.{},
     /// Selectable, but absent from help and completions.
     hidden: bool = false,
+};
+
+/// The payload of a subcommand that takes any name no other subcommand has,
+/// with every argument after the name as it is: commands the program finds at
+/// run time, as git's and cargo's external commands are. Its `Command.name`
+/// is how help shows it, such as `<step>`. A command has at most one.
+pub const External = struct {
+    /// The name given.
+    name: []const u8,
+    /// Every argument after the name, as given.
+    args: []const []const u8 = &.{},
 };
 
 /// A command line shown in help, with what it does.

@@ -2,6 +2,7 @@
 //! a child process with the arguments a program holds.
 const std = @import("std");
 const model = @import("model.zig");
+const spec = @import("spec.zig");
 const value = @import("value.zig");
 const Allocator = std.mem.Allocator;
 
@@ -30,7 +31,12 @@ fn command(comptime T: type, arena: Allocator, out: *std.ArrayList([]const u8), 
     var dashed = false;
     inline for (i.positionals) |p| {
         const field = @field(v, p.field);
-        if (p.kind == .list) {
+        if (p.kind == .list and p.meta.raw) {
+            // Raw arguments follow a `--`, which the parser drops, so none of them reads as an option.
+            if (field.len != 0 and !dashed) try out.append(arena, "--");
+            if (field.len != 0) dashed = true;
+            try out.appendSlice(arena, field);
+        } else if (p.kind == .list) {
             for (field) |item| {
                 if (splits(p, item)) return error.Unrepresentable;
                 try positional(p, arena, out, item, &dashed);
@@ -47,8 +53,18 @@ fn command(comptime T: type, arena: Allocator, out: *std.ArrayList([]const u8), 
                 const sub = comptime for (c.list) |sub| {
                     if (std.mem.eql(u8, sub.tag, @tagName(tag))) break sub;
                 } else unreachable;
-                try out.append(arena, sub.name);
-                if (@TypeOf(payload) != void) try command(@TypeOf(payload), arena, out, payload);
+                if (@TypeOf(payload) == spec.External) {
+                    // The name must read back as this variant: no other subcommand's, and no option.
+                    if (payload.name.len == 0 or payload.name[0] == '-') return error.Unrepresentable;
+                    inline for (c.list) |other| if (!other.external) inline for (.{other.name} ++ other.aliases) |name| {
+                        if (std.mem.eql(u8, name, payload.name)) return error.Unrepresentable;
+                    };
+                    try out.append(arena, payload.name);
+                    try out.appendSlice(arena, payload.args);
+                } else {
+                    try out.append(arena, sub.name);
+                    if (@TypeOf(payload) != void) try command(@TypeOf(payload), arena, out, payload);
+                }
             },
         }
     }

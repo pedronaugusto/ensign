@@ -141,6 +141,7 @@ Each field's type says how it is read:
 | `?T` | null unless given |
 | `[]const T` | every occurrence, in order; `delimiter` also splits one argument into several values |
 | a tagged union, or an optional one | its subcommands, each a struct or `void` |
+| `ensign.External`, as one subcommand's type | any name no other subcommand has, with every argument after it as given: commands found at run time, as git's and cargo's |
 
 An aegis value is recognized by the parameters its type publishes, never by
 its name, and help shows its default as the command line spells it
@@ -163,7 +164,11 @@ positional. Where no short option is a digit, `-5` is a positional too. Long
 names are matched whole, never by a prefix.
 
 Positionals are taken in declaration order; a list positional takes the rest
-and comes last, and a command with subcommands has none. A subcommand's own
+and comes last, and a command with subcommands has none. With `raw = true`, a
+list of text takes every argument from the first the command does not read as
+one of its options, dashes and `--` included, as a program that wraps another
+passes them on (`bay build -Doptimize=ReleaseSafe`); a `--` before them is
+dropped. A subcommand's own
 options follow its name. An option with `global = true` is accepted below its
 command too, and its value stays in the command that declares it.
 
@@ -214,8 +219,9 @@ UTF-8 as `\xNN`.
 | Call | Does |
 |---|---|
 | `Spec(T)` | The declaration type: `name`, `version`, `about`, `description`, `options`, `commands`, `conflicts`, `examples`, `sections`, and the `help` and `version_flag` flags, null to leave them to the program |
-| `Option` | A field's `help`, `short`, `long`, `aliases`, `value_name`, `env`, `positional`, `count`, `global`, `hidden`, `negatable`, `delimiter`, `hint` and `section` |
+| `Option` | A field's `help`, `short`, `long`, `aliases`, `value_name`, `env`, `positional`, `count`, `global`, `hidden`, `negatable`, `delimiter`, `hint`, `section` and `raw` |
 | `Command` | A subcommand's `help`, `name`, `aliases` and `hidden` |
+| `External` | The payload of a subcommand that takes any other name: the `name` given and its `args` |
 | `parseOrExit(T, init)` | Parses the process's arguments; answers help, the version and mistakes, and exits |
 | `parseArgs(T, arena, args, options)` | Parses a `std.process.Args`; decoded arguments and lists live in `arena` |
 | `parse(T, gpa, args, options)` | Parses a slice of arguments after the program's name; lists are allocated with `gpa` |
