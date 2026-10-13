@@ -69,13 +69,17 @@ fn walk(comptime T: type, comptime path: []const u8, comptime inherited: []const
         const e = entry(o);
         entries = entries ++ .{e};
         if (o.meta.global) globals = globals ++ .{e};
-        if (o.kind == .flag and o.meta.negatable) entries = entries ++ .{Entry{
-            .spellings = &.{"--no-" ++ o.long},
-            .offered = if (o.shows_negation and !o.meta.hidden) &.{"--no-" ++ o.long} else &.{},
-            .kind = .flag,
-            .help = firstLine(o.meta.help),
-            .hidden = !o.shows_negation or o.meta.hidden,
-        }};
+        if (o.kind == .flag and o.meta.negatable) {
+            const negation: Entry = .{
+                .spellings = &.{"--no-" ++ o.long},
+                .offered = if (o.shows_negation and !o.meta.hidden) &.{"--no-" ++ o.long} else &.{},
+                .kind = .flag,
+                .help = firstLine(o.meta.help),
+                .hidden = !o.shows_negation or o.meta.hidden,
+            };
+            entries = entries ++ .{negation};
+            if (o.meta.global) globals = globals ++ .{negation};
+        }
     }
     for (model.builtins(i)) |f| {
         const spellings: []const []const u8 = &(.{"--" ++ f.long} ++ (if (f.short) |c| .{"-" ++ .{c}} else .{}));

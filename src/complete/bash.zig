@@ -65,7 +65,9 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\                        if [ $k -eq ${#word} ]; then pending="-${word:k-1:1}"; fi
         \\                        break
         \\                    fi
-        \\                done ;;
+        \\                done
+        \\                # `-o=value`, split at `=` like a long option.
+        \\                if [ -n "$pending" ] && [ "${COMP_WORDS[i]}" = "=" ]; then pending=; i=$((i + 2)); fi ;;
         \\            *)
         \\                if _ensign_<id>_sub "$path:$word"; then path="$REPLY"; count=0; else count=$((count + 1)); fi ;;
         \\        esac

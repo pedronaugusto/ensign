@@ -22,7 +22,7 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\}
         \\_ensign_<id>() {
         \\    emulate -L zsh
-        \\    local cur="${words[CURRENT]}" word path= pending= opt= REPLY
+        \\    local cur="${words[CURRENT]}" word ensign_path= pending= opt= REPLY
         \\    local -a ensign_items
         \\    integer done=0 count=0 i=2 k
         \\    if [[ $cur == --*=* ]]; then
@@ -39,12 +39,12 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\            --*=*) ;;
         \\            -) (( count++ )) ;;
         \\            --*)
-        \\                _ensign_<id>_kind "$path:$word"
+        \\                _ensign_<id>_kind "${ensign_path}:$word"
         \\                if [[ -n $REPLY && $REPLY != flag ]]; then pending="$word"; fi ;;
         \\            -*)
         \\                k=2
         \\                while (( k <= ${#word} )); do
-        \\                    _ensign_<id>_kind "$path:-${word[k]}"
+        \\                    _ensign_<id>_kind "${ensign_path}:-${word[k]}"
         \\                    if [[ -n $REPLY && $REPLY != flag ]]; then
         \\                        if (( k == ${#word} )); then pending="-${word[k]}"; fi
         \\                        break
@@ -52,22 +52,22 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\                    (( k++ ))
         \\                done ;;
         \\            *)
-        \\                if _ensign_<id>_sub "$path:$word"; then path="$REPLY"; count=0; else (( count++ )); fi ;;
+        \\                if _ensign_<id>_sub "${ensign_path}:$word"; then ensign_path="$REPLY"; count=0; else (( count++ )); fi ;;
         \\        esac
         \\    done
         \\    if [[ -n $pending ]]; then opt="$pending"; fi
-        \\    if [[ -n $opt ]]; then _ensign_<id>_complete "$path:$opt"; return; fi
+        \\    if [[ -n $opt ]]; then _ensign_<id>_complete "${ensign_path}:$opt"; return; fi
         \\    if (( ! done )) && [[ $cur == -* ]]; then
-        \\        _ensign_<id>_described "options:$path"
+        \\        _ensign_<id>_described "options:${ensign_path}"
         \\        _describe -t options option ensign_items
         \\        return
         \\    fi
-        \\    _ensign_<id>_described "commands:$path"
+        \\    _ensign_<id>_described "commands:${ensign_path}"
         \\    if (( ! done && ${#ensign_items} )); then
         \\        _describe -t commands command ensign_items
         \\        return
         \\    fi
-        \\    _ensign_<id>_complete "$path:#$count"
+        \\    _ensign_<id>_complete "${ensign_path}:#$count"
         \\}
         \\if [[ $zsh_eval_context[-1] == loadautofunc ]]; then
         \\    _ensign_<id> "$@"

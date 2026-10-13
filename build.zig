@@ -104,6 +104,7 @@ const rejected = [_]struct { name: []const u8, error_text: []const u8 }{
     .{ .name = "name_with_space", .error_text = "must start with a letter or digit and hold only letters, digits, '-', '_', '.' or '+'" },
     .{ .name = "unsupported_type", .error_text = "is no command-line value; use an integer, float, enum, bool, []const u8 or a slice of one" },
     .{ .name = "untyped_spec", .error_text = "must be declared `pub const spec: ensign.Spec(@This())`" },
+    .{ .name = "global_hides_builtin", .error_text = "its -V flag hides the global option of global_hides_builtin.T" },
 };
 
 /// ensign again, in the mode a benchmark builds in: an imported module keeps

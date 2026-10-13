@@ -155,3 +155,23 @@ test "render writes a value back, and refuses what no command line gives" {
     };
     try std.testing.expectError(error.Unrepresentable, ensign.render(Path, a, .{ .path = null }));
 }
+
+test "an optional flag needs no default" {
+    const Tri = struct { cache: ?bool };
+    var v = try support.parsed(Tri, &.{});
+    try std.testing.expectEqual(@as(?bool, null), v.cache);
+    v = try support.parsed(Tri, &.{"--no-cache"});
+    try std.testing.expectEqual(@as(?bool, false), v.cache);
+}
+
+test "render refuses a list item holding its delimiter" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const Split = struct {
+        tags: []const []const u8 = &.{},
+        pub const spec: ensign.Spec(@This()) = .{ .options = .{ .tags = .{ .delimiter = ',' } } };
+    };
+    try std.testing.expectError(error.Unrepresentable, ensign.render(Split, arena.allocator(), .{ .tags = &.{"a,b"} }));
+    const args = try ensign.render(Split, arena.allocator(), .{ .tags = &.{ "a", "b" } });
+    try std.testing.expectEqual(@as(usize, 2), args.len);
+}

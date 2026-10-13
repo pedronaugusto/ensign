@@ -44,7 +44,7 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\                    set -l kind (__ensign_<id>_kind "$path:-"(string sub -s $k -l 1 -- $word))
         \\                    if test -n "$kind" -a "$kind" != flag
         \\                        if test $k = $n
-        \\                            set pending $word
+        \\                            set pending "-"(string sub -s $k -l 1 -- $word)
         \\                        end
         \\                        break
         \\                    end
@@ -60,24 +60,46 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\        end
         \\    end
         \\    echo $count
+        \\    if test -n "$pending"; echo $pending; else; echo none; end
         \\    echo $path
         \\end
         \\function __ensign_<id>_at
         \\    set -l state (__ensign_<id>_state)
-        \\    test "$state[2]" = "$argv[1]"
+        \\    test "$state[2]" = none -a "$state[3]" = "$argv[1]"
         \\end
         \\function __ensign_<id>_positional
         \\    set -l state (__ensign_<id>_state)
-        \\    test "$state[2]" = "$argv[1]"; or return 1
+        \\    test "$state[2]" = none -a "$state[3]" = "$argv[1]"; or return 1
         \\    if test "$argv[3]" = list
         \\        test $state[1] -ge $argv[2]
         \\    else
         \\        test $state[1] -eq $argv[2]
         \\    end
         \\end
+        \\function __ensign_<id>_pending
+        \\    set -l state (__ensign_<id>_state)
+        \\    test "$state[2]" != none; or return 1
+        \\    test (__ensign_<id>_kind "$state[3]:$state[2]") = "$argv[1]"
+        \\end
+        \\function __ensign_<id>_pending_values
+        \\    set -l state (__ensign_<id>_state)
+        \\    __ensign_<id>_values "$state[3]:$state[2]"
+        \\end
         \\
     , name);
     for (nodes) |node| try lines(node, w, name);
+    // The value of an option the line ends on, whichever spelling it was given.
+    const pending = [_][2][]const u8{
+        .{ "values", "-f -a '(__ensign_<id>_pending_values)'" },
+        .{ "file", "-F" },
+        .{ "directory", "-f -a '(__fish_complete_directories)'" },
+        .{ "command", "-f -a '(__fish_complete_command)'" },
+        .{ "text", "-f" },
+    };
+    inline for (pending) |p| {
+        try w.print("complete -c {s} -n '", .{name});
+        try bash.writeAll(w, "__ensign_<id>_pending " ++ p[0] ++ "' " ++ p[1] ++ "\n", name);
+    }
 }
 
 /// `__ensign_<name>_kind` and `__ensign_<name>_sub`, as `switch`es.
@@ -87,6 +109,15 @@ fn kinds(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!void {
         try w.writeAll("        case");
         for (e.spellings) |spelling| try w.print(" '{s}:{s}'", .{ node.path, spelling });
         try w.print("\n            echo {s}\n", .{tree.kindName(e.kind)});
+    };
+    try w.writeAll("    end\nend\n");
+    try bash.writeAll(w, "function __ensign_<id>_values\n    switch $argv[1]\n", name);
+    for (nodes) |node| for (node.entries) |e| if (e.kind == .values) {
+        try w.writeAll("        case");
+        for (e.spellings) |spelling| try w.print(" '{s}:{s}'", .{ node.path, spelling });
+        try w.writeAll("\n            printf '%s\\n'");
+        for (e.values) |v| try w.print(" {s}", .{v});
+        try w.writeByte('\n');
     };
     try w.writeAll("    end\nend\n");
     try bash.writeAll(w, "function __ensign_<id>_sub\n    switch $argv[1]\n", name);

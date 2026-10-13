@@ -154,3 +154,11 @@ test "a mistake prints its usage and where help is" {
         \\
     , w.buffered());
 }
+
+test "an empty default is not shown" {
+    const Named = struct { name: []const u8 = "", level: u8 = 0 };
+    var buffer: [1024]u8 = undefined;
+    const page = try support.helpPage(Named, &.{"--help"}, 80, &buffer);
+    try std.testing.expect(std.mem.find(u8, page, "[default: ]") == null);
+    try std.testing.expect(std.mem.find(u8, page, "[default: 0]") != null);
+}

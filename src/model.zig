@@ -170,7 +170,7 @@ fn option(comptime T: type, comptime name: [:0]const u8, comptime F: type, compt
     var Value = Child;
     if (Child == bool) {
         kind = .flag;
-        if (!has_default) @compileError("ensign: " ++ where ++ ": a boolean needs a default, or `?bool` to tell absent from false");
+        if (!has_default and !optional) @compileError("ensign: " ++ where ++ ": a boolean needs a default, or `?bool` to tell absent from false");
     } else if (isList(Child)) {
         if (optional) @compileError("ensign: " ++ where ++ ": a list is already empty when absent; drop the optional");
         kind = .list;
@@ -312,6 +312,13 @@ pub fn checkBelow(comptime above: Info, comptime below: Info) void {
                 if (std.mem.eql(u8, a, b)) @compileError("ensign: " ++ @typeName(below.T) ++ ": --" ++ b ++ " hides the global option of " ++ @typeName(above.T));
             };
             if (g.short != null and g.short == o.short) @compileError("ensign: " ++ @typeName(below.T) ++ ": -" ++ .{g.short.?} ++ " hides the global option of " ++ @typeName(above.T));
+        };
+        // The flags the command below answers itself are its names too.
+        for (above.globals()) |g| for (builtins(below)) |f| {
+            for (.{g.long} ++ g.aliases) |a| {
+                if (std.mem.eql(u8, a, f.long)) @compileError("ensign: " ++ @typeName(below.T) ++ ": its --" ++ f.long ++ " flag hides the global option of " ++ @typeName(above.T));
+            }
+            if (g.short != null and g.short == f.short) @compileError("ensign: " ++ @typeName(below.T) ++ ": its -" ++ .{g.short.?} ++ " flag hides the global option of " ++ @typeName(above.T));
         };
     }
 }
