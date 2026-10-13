@@ -41,6 +41,11 @@
       "zig",
       "build",
       "check-consumer"
+    ],
+    [
+      "zig",
+      "build",
+      "check-freestanding"
     ]
   ],
   "glint": {
