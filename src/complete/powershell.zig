@@ -105,7 +105,7 @@ fn lookups(nodes: []const Node, w: *Writer) Writer.Error!void {
             try w.print("            '{s}:#{d}' {{ return '{s}' }}\n", .{ node.path, n, tree.kindName(p.kind) });
         }
     }
-    try w.writeAll("        }\n");
+    try w.writeAll("            default {}\n        }\n");
     try listPositionals(nodes, w, false);
     try w.writeAll("        return ''\n    }\n");
 
@@ -120,7 +120,7 @@ fn lookups(nodes: []const Node, w: *Writer) Writer.Error!void {
             try values(w, p.values);
         };
     }
-    try w.writeAll("        }\n");
+    try w.writeAll("            default {}\n        }\n");
     try listPositionals(nodes, w, true);
     try w.writeAll("        return @()\n    }\n");
 
@@ -130,7 +130,7 @@ fn lookups(nodes: []const Node, w: *Writer) Writer.Error!void {
         for (sub.aliases) |alias| try w.print(" {{ return '{s}' }}\n            '{s}:{s}'", .{ sub.path, node.path, alias });
         try w.print(" {{ return '{s}' }}\n", .{sub.path});
     };
-    try w.writeAll("        }\n        return $null\n    }\n");
+    try w.writeAll("            default {}\n        }\n        return $null\n    }\n");
 
     try w.writeAll("    function Get-EnsignOffer([string]$key) {\n        switch -CaseSensitive -Exact ($key) {\n");
     for (nodes) |node| {
@@ -149,7 +149,7 @@ fn lookups(nodes: []const Node, w: *Writer) Writer.Error!void {
         };
         try w.writeAll(") }\n");
     }
-    try w.writeAll("        }\n        return @()\n    }\n");
+    try w.writeAll("            default {}\n        }\n        return @()\n    }\n");
 }
 
 /// A list positional takes every index from its own on: a wildcard match.
@@ -162,7 +162,7 @@ fn listPositionals(nodes: []const Node, w: *Writer, only_values: bool) Writer.Er
         try w.print("            '{s}:#*'", .{node.path});
         if (only_values) try values(w, p.values) else try w.print(" {{ return '{s}' }}\n", .{tree.kindName(p.kind)});
     };
-    if (any) try w.writeAll("        }\n");
+    if (any) try w.writeAll("            default {}\n        }\n");
 }
 
 fn values(w: *Writer, list: []const []const u8) Writer.Error!void {

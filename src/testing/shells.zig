@@ -11,6 +11,8 @@ pub const Case = struct {
     want: []const u8,
     /// What this shell offers instead, where it differs on its own terms.
     fish: ?[]const u8 = null,
+    /// The one shell the case is for, when the others see the line otherwise.
+    only: ?Shell = null,
 };
 
 pub const Shell = ensign.Shell;
@@ -87,6 +89,7 @@ pub fn check(comptime T: type, shell: Shell, name: []const u8, cases: []const Ca
     }
     var lines = std.mem.splitScalar(u8, std.mem.trimEnd(u8, result.stdout, "\r\n"), '\n');
     for (cases) |case| {
+        if (case.only) |only| if (only != shell) continue;
         const got = std.mem.trimEnd(u8, lines.next() orelse "", "\r");
         const want = if (shell == .fish) case.fish orelse case.want else case.want;
         if (!std.mem.eql(u8, got, want)) {
@@ -104,7 +107,7 @@ fn writeDriver(w: *std.Io.Writer, shell: Shell, name: []const u8, cases: []const
                 \\t() {{ COMP_WORDS=("$@"); COMP_CWORD=$(( ${{#COMP_WORDS[@]}} - 1 )); COMPREPLY=(); _ensign_{s}; printf '%s\n' "${{COMPREPLY[@]}}" | sort | paste -sd' ' -; }}
                 \\
             , .{name});
-            for (cases) |case| try words(w, "t", case.line, '\'');
+            for (cases) |case| if (case.only == null or case.only == shell) try words(w, "t", case.line, '\'');
         },
         .zsh => {
             try w.print(
@@ -112,13 +115,13 @@ fn writeDriver(w: *std.Io.Writer, shell: Shell, name: []const u8, cases: []const
                 \\_describe() {{ local item; for item in "${{(@P)4}}"; do item=${{item%%:*}}; [[ $item == ${{ensign_cur}}* ]] && ensign_out+=("$item"); done }}
                 \\compadd() {{ [[ $1 == -- ]] && shift; local v; for v in "$@"; do [[ $v == ${{ensign_cur}}* ]] && ensign_out+=("$ensign_iprefix$v"); done }}
                 \\_files() {{ local f; for f in ${{ensign_cur}}*(N); do [[ $1 == -/ && ! -d $f ]] && continue; ensign_out+=("$f"); done }}
-                \\_command_names() {{ ensign_out+=('<commands>') }}
+                \\_command_names() {{ [[ -n $PATH ]] && ensign_out+=('<commands>') }}
                 \\compset() {{ if [[ $1 == -P ]]; then ensign_iprefix="${{ensign_cur%%=*}}="; ensign_cur="${{ensign_cur#*=}}"; fi }}
                 \\source ./script
                 \\t() {{ words=("$@"); CURRENT=$#words; ensign_cur="${{words[CURRENT]}}"; ensign_iprefix=; ensign_out=(); _ensign_{s}; print -r -- "${{(j: :)${{(@o)ensign_out}}}}" }}
                 \\
             , .{name});
-            for (cases) |case| try words(w, "t", case.line, '\'');
+            for (cases) |case| if (case.only == null or case.only == shell) try words(w, "t", case.line, '\'');
         },
         .fish => {
             try w.print(
@@ -130,11 +133,11 @@ fn writeDriver(w: *std.Io.Writer, shell: Shell, name: []const u8, cases: []const
                 \\end
                 \\
             , .{name});
-            for (cases) |case| {
+            for (cases) |case| if (case.only == null or case.only == shell) {
                 try w.writeAll("t '");
                 try w.writeAll(case.line);
                 try w.writeAll("'\n");
-            }
+            };
         },
         .powershell => {
             try w.writeAll(
@@ -147,11 +150,11 @@ fn writeDriver(w: *std.Io.Writer, shell: Shell, name: []const u8, cases: []const
                 \\}
                 \\
             );
-            for (cases) |case| {
+            for (cases) |case| if (case.only == null or case.only == shell) {
                 try w.writeAll("t '");
                 try w.writeAll(case.line);
                 try w.writeAll("'\n");
-            }
+            };
         },
     }
 }

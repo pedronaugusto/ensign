@@ -4,13 +4,13 @@ const std = @import("std");
 const Writer = std.Io.Writer;
 
 /// Writes `bytes` so a terminal shows them as they are: printable UTF-8
-/// stays, and control characters and bytes that are not UTF-8 (an unpaired
-/// surrogate in WTF-8 among them) are written `\xNN`.
+/// stays; control characters, bidirectional controls and bytes that are not
+/// UTF-8 (an unpaired surrogate in WTF-8 among them) are written `\xNN`.
 pub fn writeEscaped(w: *Writer, bytes: []const u8) Writer.Error!void {
     var i: usize = 0;
     while (i < bytes.len) {
         const len = std.unicode.utf8ByteSequenceLength(bytes[i]) catch 0;
-        if (len > 1 and i + len <= bytes.len and std.unicode.utf8ValidateSlice(bytes[i..][0..len])) {
+        if (len > 1 and i + len <= bytes.len and std.unicode.utf8ValidateSlice(bytes[i..][0..len]) and !control(bytes[i..][0..len])) {
             try w.writeAll(bytes[i..][0..len]);
             i += len;
             continue;
@@ -23,6 +23,15 @@ pub fn writeEscaped(w: *Writer, bytes: []const u8) Writer.Error!void {
         }
         i += 1;
     }
+}
+
+/// A C1 control (U+0080 to U+009F) or a bidirectional control (U+202A to
+/// U+202E, U+2066 to U+2069): characters that change how a terminal shows
+/// what follows them.
+fn control(sequence: []const u8) bool {
+    if (sequence.len == 2) return sequence[0] == 0xc2 and sequence[1] < 0xa0;
+    if (sequence.len != 3 or sequence[0] != 0xe2) return false;
+    return (sequence[1] == 0x80 and sequence[2] >= 0xaa and sequence[2] <= 0xae) or (sequence[1] == 0x81 and sequence[2] >= 0xa6 and sequence[2] <= 0xa9);
 }
 
 /// A `{f}` formatter for `writeEscaped`.
@@ -182,8 +191,8 @@ pub fn upper(comptime name: []const u8) []const u8 {
 test "escaped bytes" {
     var buffer: [64]u8 = undefined;
     var w: Writer = .fixed(&buffer);
-    try writeEscaped(&w, "é\x01a\xff\xed\xa0\x80");
-    try std.testing.expectEqualStrings("é\\x01a\\xff\\xed\\xa0\\x80", w.buffered());
+    try writeEscaped(&w, "é\x01a\xff\xed\xa0\x80\xc2\x9b\xe2\x80\xae");
+    try std.testing.expectEqualStrings("é\\x01a\\xff\\xed\\xa0\\x80\\xc2\\x9b\\xe2\\x80\\xae", w.buffered());
 }
 
 test "distance" {

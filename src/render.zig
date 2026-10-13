@@ -8,7 +8,7 @@ const Allocator = std.mem.Allocator;
 pub const RenderError = error{
     /// The value holds what no command line gives: a count below its
     /// default, a flag false that cannot be negated, a null or empty list
-    /// where the default is not.
+    /// where the default is not, a list item holding its delimiter.
     Unrepresentable,
     OutOfMemory,
 };
@@ -31,7 +31,10 @@ fn command(comptime T: type, arena: Allocator, out: *std.ArrayList([]const u8), 
     inline for (i.positionals) |p| {
         const field = @field(v, p.field);
         if (p.kind == .list) {
-            for (field) |item| try positional(p, arena, out, item, &dashed);
+            for (field) |item| {
+                if (splits(p, item)) return error.Unrepresentable;
+                try positional(p, arena, out, item, &dashed);
+            }
         } else if (p.optional) {
             if (field) |item| try positional(p, arena, out, item, &dashed);
         } else try positional(p, arena, out, field, &dashed);
@@ -76,9 +79,20 @@ fn option(comptime o: model.Opt, arena: Allocator, out: *std.ArrayList([]const u
         .list => {
             if (!o.required and equal(o.Field, field, d.?)) return;
             if (field.len == 0) return error.Unrepresentable;
-            for (field) |item| try out.append(arena, try joined(o, arena, item));
+            for (field) |item| {
+                if (splits(o, item)) return error.Unrepresentable;
+                try out.append(arena, try joined(o, arena, item));
+            }
         },
     }
+}
+
+/// Whether a list item holds its option's delimiter, so that parsing it
+/// back would make several.
+fn splits(comptime o: model.Opt, item: o.Value) bool {
+    const d = o.meta.delimiter orelse return false;
+    if (@typeInfo(o.Value) != .pointer) return false;
+    return std.mem.findScalar(u8, item, d) != null;
 }
 
 fn joined(comptime o: model.Opt, arena: Allocator, item: o.Value) Allocator.Error![]const u8 {

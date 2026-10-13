@@ -208,7 +208,11 @@ fn defaultText(comptime o: model.Opt) ?[]const u8 {
     const d = o.default() orelse return null;
     return switch (o.kind) {
         .flag, .count => null,
-        .single => if (o.optional) (if (d) |v| one(o.Value, v) else null) else one(o.Value, d),
+        .single => blk: {
+            const v = (if (o.optional) d else @as(?o.Value, d)) orelse break :blk null;
+            const shown = one(o.Value, v);
+            break :blk if (shown.len == 0) null else shown;
+        },
         .list => blk: {
             if (d.len == 0) break :blk null;
             var out: []const u8 = "";
