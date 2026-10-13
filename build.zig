@@ -65,6 +65,16 @@ pub fn dev(b: *std.Build, tools: type) void {
     examples.dependOn(&run_example.step);
     test_step.dependOn(examples);
     check.dependOn(&example.step);
+    // Parsing a slice, help and completions need no operating system.
+    const freestanding = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
+    const free_package = b.dependency("ensign", .{ .target = freestanding, .optimize = .small });
+    const object = b.addObject(.{ .name = "ensign-freestanding", .root_module = b.createModule(.{
+        .root_source_file = p.path("ci/freestanding.zig"),
+        .target = freestanding,
+        .optimize = .small,
+        .imports = &.{.{ .name = "ensign", .module = free_package.module("ensign") }},
+    }) });
+    b.step("check-freestanding", "Build parsing, help and completions for wasm32-freestanding").dependOn(&object.step);
     b.getInstallStep().dependOn(&tests.step);
     b.getInstallStep().dependOn(&example.step);
 
