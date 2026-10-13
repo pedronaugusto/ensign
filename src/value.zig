@@ -2,19 +2,67 @@
 //! text that parses back to a value.
 const std = @import("std");
 const text = @import("text.zig");
+const kinds = @import("kinds.zig");
 const Writer = std.Io.Writer;
 
-/// Parses one value of `V`; null when `bytes` is not one. Integers take an
-/// optional sign, `0x`, `0o` or `0b`, and `_` between digits; enums take the
-/// tag with `-` or `_`; text is taken as it is.
+/// One value read from its text, or what the text had to be.
+pub fn Read(comptime V: type) type {
+    return union(enum) {
+        value: V,
+        /// Completes "expected ...": the words for this mistake, which for
+        /// an aegis value say what was out of range or too fine.
+        refused: []const u8,
+    };
+}
+
+/// Reads one value of `V`. Integers take an optional sign, `0x`, `0o` or
+/// `0b`, and `_` between digits; enums take the tag with `-` or `_`; text
+/// is taken as it is; an aegis duration or size takes aegis's text, and an
+/// aegis integer is checked by its type.
+pub fn read(comptime V: type, bytes: []const u8) Read(V) {
+    const refused: Read(V) = .{ .refused = expected(V) };
+    return switch (comptime kinds.of(V)) {
+        .integer => if (std.fmt.parseInt(V, bytes, 0)) |v| .{ .value = v } else |_| refused,
+        .float => if (std.fmt.parseFloat(V, bytes)) |v| .{ .value = v } else |_| refused,
+        .boolean => if (boolean(bytes)) |v| .{ .value = v } else refused,
+        .enumeration => if (Tags(V).map.get(bytes)) |v| .{ .value = v } else refused,
+        .text => .{ .value = bytes },
+        .checked => blk: {
+            const C = kinds.Checked(V);
+            const raw = std.fmt.parseInt(C.Repr, bytes, 0) catch break :blk refused;
+            break :blk if (C.make(raw)) |v| .{ .value = v } else refused;
+        },
+        .duration, .size => if (V.parse(bytes)) |v| .{ .value = v } else |err| .{ .refused = Refusals(V).of(err) },
+        .none => @compileError("ensign: no parser for " ++ @typeName(V)),
+    };
+}
+
+/// Reads one value of `V`; null when `bytes` is not one.
 pub fn parse(comptime V: type, bytes: []const u8) ?V {
-    return switch (@typeInfo(V)) {
-        .int => std.fmt.parseInt(V, bytes, 0) catch null,
-        .float => std.fmt.parseFloat(V, bytes) catch null,
-        .bool => boolean(bytes),
-        .@"enum" => Tags(V).map.get(bytes),
-        .pointer => bytes,
-        else => @compileError("ensign: no parser for " ++ @typeName(V)),
+    return switch (read(V, bytes)) {
+        .value => |v| v,
+        .refused => null,
+    };
+}
+
+/// What an aegis duration or size had to be, for each way its text fails.
+fn Refusals(comptime V: type) type {
+    return struct {
+        const duration = kinds.of(V) == .duration;
+        const bounds = std.fmt.comptimePrint("{s} from {f} to {f}", .{
+            if (duration) "a duration" else "a size",
+            V.fromRaw(std.math.minInt(V.Representation)),
+            V.fromRaw(std.math.maxInt(V.Representation)),
+        });
+        const fine = if (duration) "a duration in whole " ++ @tagName(V.Scale) ++ "s" else "a whole number of bytes";
+
+        fn of(err: V.ParseError) []const u8 {
+            return switch (err) {
+                error.Malformed => expected(V),
+                error.Overflow => bounds,
+                error.Inexact => fine,
+            };
+        }
     };
 }
 
@@ -62,30 +110,39 @@ pub fn names(comptime E: type) []const []const u8 {
 /// What a value of `V` must be, completing "expected ...".
 pub fn expected(comptime V: type) []const u8 {
     @setEvalBranchQuota(text.branch_quota);
-    const out = comptime switch (@typeInfo(V)) {
-        .int => std.fmt.comptimePrint("an integer from {d} to {d}", .{ std.math.minInt(V), std.math.maxInt(V) }),
+    const out = comptime switch (kinds.of(V)) {
+        .integer => range(V, std.math.minInt(V), std.math.maxInt(V), false),
         .float => "a number",
-        .bool => "true or false",
-        .@"enum" => blk: {
+        .boolean => "true or false",
+        .enumeration => blk: {
             var list: []const u8 = "one of ";
             for (names(V), 0..) |name, n| list = list ++ (if (n == 0) "" else ", ") ++ name;
             break :blk list;
         },
-        .pointer => "text",
-        else => @compileError("ensign: no parser for " ++ @typeName(V)),
+        .text => "text",
+        .checked => range(kinds.Checked(V).Repr, kinds.Checked(V).min, kinds.Checked(V).max, kinds.Checked(V).skips_zero),
+        .duration => "a duration such as 30s or 1m30s",
+        .size => "a size such as 4096, 64MiB or 1.5GB",
+        .none => @compileError("ensign: no parser for " ++ @typeName(V)),
     };
     return out;
 }
 
-/// Writes `v` as text `parse` reads back to the same value.
+fn range(comptime R: type, comptime min: R, comptime max: R, comptime skips_zero: bool) []const u8 {
+    return std.fmt.comptimePrint("{s} from {d} to {d}", .{ if (skips_zero) "a nonzero integer" else "an integer", min, max });
+}
+
+/// Writes `v` as text `read` reads back to the same value.
 pub fn write(comptime V: type, w: *Writer, v: V) Writer.Error!void {
-    switch (@typeInfo(V)) {
-        .int => try w.print("{d}", .{v}),
+    switch (comptime kinds.of(V)) {
+        .integer => try w.print("{d}", .{v}),
         .float => try w.print("{e}", .{v}),
-        .bool => try w.writeAll(if (v) "true" else "false"),
-        .@"enum" => try w.writeAll(names(V)[enumIndex(V, v)]),
-        .pointer => try w.writeAll(v),
-        else => @compileError("ensign: no writer for " ++ @typeName(V)),
+        .boolean => try w.writeAll(if (v) "true" else "false"),
+        .enumeration => try w.writeAll(names(V)[enumIndex(V, v)]),
+        .text => try w.writeAll(v),
+        .checked => try w.print("{d}", .{v.raw()}),
+        .duration, .size => try v.format(w),
+        .none => @compileError("ensign: no writer for " ++ @typeName(V)),
     }
 }
 

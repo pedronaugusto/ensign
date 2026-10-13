@@ -9,4 +9,5 @@ test {
     _ = @import("testing/process_test.zig");
     _ = @import("testing/property_test.zig");
     _ = @import("testing/complete_test.zig");
+    _ = @import("testing/aegis_test.zig");
 }

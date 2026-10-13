@@ -7,7 +7,9 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     // Text in help is measured in the columns a terminal gives it: xenoglyph's widths.
     const xenoglyph = b.dependency("xenoglyph", .{ .target = target, .optimize = optimize }).module("xenoglyph");
-    const module = b.addModule("ensign", .{ .root_source_file = b.path("src/ensign.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "xenoglyph", .module = xenoglyph }} });
+    // aegis's checked scalars are values a command line gives: ranged integers, durations, sizes.
+    const aegis = b.dependency("aegis", .{ .target = target, .optimize = optimize }).module("aegis");
+    const module = b.addModule("ensign", .{ .root_source_file = b.path("src/ensign.zig"), .target = target, .optimize = optimize, .imports = &.{ .{ .name = "xenoglyph", .module = xenoglyph }, .{ .name = "aegis", .module = aegis } } });
     b.installArtifact(b.addLibrary(.{ .name = "ensign", .root_module = module }));
 }
 
@@ -30,7 +32,11 @@ pub fn dev(b: *std.Build, tools: type) void {
             .root_source_file = p.path("src/tests.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{ .{ .name = "shakedown", .module = shakedown.module("shakedown") }, .{ .name = "xenoglyph", .module = p.dependency("xenoglyph", .{ .target = target, .optimize = optimize }).module("xenoglyph") } },
+            .imports = &.{
+                .{ .name = "shakedown", .module = shakedown.module("shakedown") },
+                .{ .name = "xenoglyph", .module = p.dependency("xenoglyph", .{ .target = target, .optimize = optimize }).module("xenoglyph") },
+                .{ .name = "aegis", .module = p.dependency("aegis", .{ .target = target, .optimize = optimize }).module("aegis") },
+            },
         }),
     });
     const check = b.step("check", "Compile the tests, library, example and benchmarks without running them");
@@ -62,12 +68,12 @@ pub fn dev(b: *std.Build, tools: type) void {
 
     const example = b.addExecutable(.{
         .name = "usage",
-        .root_module = b.createModule(.{ .root_source_file = p.path("examples/usage.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "ensign", .module = module }} }),
+        .root_module = b.createModule(.{ .root_source_file = p.path("examples/usage.zig"), .target = target, .optimize = optimize, .imports = &.{ .{ .name = "ensign", .module = module }, .{ .name = "aegis", .module = p.dependency("aegis", .{ .target = target, .optimize = optimize }).module("aegis") } } }),
     });
     const examples = b.step("examples", "Build and run the usage example");
     const run_example = b.addRunArtifact(example);
-    run_example.addArgs(&.{ "--verbose", "build", "-j", "4", "--target=x86_64-linux", "src/main.zig" });
-    run_example.expectStdOutEqual("verbose=1 color=auto jobs=4 target=x86_64-linux files=1\n");
+    run_example.addArgs(&.{ "--verbose", "build", "-j", "4", "--timeout=1m30s", "--target=x86_64-linux", "src/main.zig" });
+    run_example.expectStdOutEqual("verbose=1 color=auto jobs=4 timeout=1m30s target=x86_64-linux files=1\n");
     examples.dependOn(&run_example.step);
     test_step.dependOn(examples);
     check.dependOn(&example.step);
@@ -78,7 +84,7 @@ pub fn dev(b: *std.Build, tools: type) void {
         .root_source_file = p.path("ci/freestanding.zig"),
         .target = freestanding,
         .optimize = .small,
-        .imports = &.{.{ .name = "ensign", .module = free_package.module("ensign") }},
+        .imports = &.{ .{ .name = "ensign", .module = free_package.module("ensign") }, .{ .name = "aegis", .module = free_package.builder.dependency("aegis", .{ .target = freestanding, .optimize = .small }).module("aegis") } },
     }) });
     b.step("check-freestanding", "Build parsing, help and completions for wasm32-freestanding").dependOn(&object.step);
     b.getInstallStep().dependOn(&tests.step);
@@ -99,7 +105,7 @@ pub fn dev(b: *std.Build, tools: type) void {
     });
     // A project that depends on ensign by path, with no packages to fetch:
     // the build a consumer gets.
-    tools.preflight.addConsumerCheck(b, p, .{ .package = "ensign", .program = p.path("ci/consumer.zig"), .modules = &.{"ensign"}, .packages = &.{p.dependency("xenoglyph", .{ .target = target, .optimize = optimize })} });
+    tools.preflight.addConsumerCheck(b, p, .{ .package = "ensign", .program = p.path("ci/consumer.zig"), .modules = &.{"ensign"}, .packages = &.{ p.dependency("xenoglyph", .{ .target = target, .optimize = optimize }), p.dependency("aegis", .{ .target = target, .optimize = optimize }) } });
 }
 
 /// Each rejected declaration and how its compile error ends.
@@ -111,7 +117,8 @@ const rejected = [_]struct { name: []const u8, error_text: []const u8 }{
     .{ .name = "bool_without_default", .error_text = "a boolean needs a default, or `?bool` to tell absent from false" },
     .{ .name = "global_hidden_below", .error_text = "--color hides the global option of global_hidden_below.T" },
     .{ .name = "name_with_space", .error_text = "must start with a letter or digit and hold only letters, digits, '-', '_', '.' or '+'" },
-    .{ .name = "unsupported_type", .error_text = "is no command-line value; use an integer, float, enum, bool, []const u8 or a slice of one" },
+    .{ .name = "unsupported_type", .error_text = "is no command-line value; use an integer, float, enum, bool, []const u8, an aegis integer, Duration or Bytes, or a slice of one" },
+    .{ .name = "nonexhaustive_enum", .error_text = "is a non-exhaustive enum, whose values have no names to read; make it exhaustive, or use an aegis integer, Duration or Bytes" },
     .{ .name = "untyped_spec", .error_text = "must be declared `pub const spec: ensign.Spec(@This())`" },
     .{ .name = "global_hides_builtin", .error_text = "its -V flag hides the global option of global_hides_builtin.T" },
 };

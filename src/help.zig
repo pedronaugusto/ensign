@@ -4,6 +4,7 @@ const std = @import("std");
 const model = @import("model.zig");
 const spec = @import("spec.zig");
 const text = @import("text.zig");
+const kinds = @import("kinds.zig");
 const value = @import("value.zig");
 const Page = @import("diagnostic.zig").Page;
 const Writer = std.Io.Writer;
@@ -194,7 +195,7 @@ fn describe(comptime o: model.Opt) []const u8 {
     var out: []const u8 = o.meta.help;
     if (defaultText(o)) |d| out = out ++ (if (out.len == 0) "" else " ") ++ "[default:" ++ text.glue ++ d ++ "]";
     if (o.meta.env) |name| out = out ++ (if (out.len == 0) "" else " ") ++ "[env:" ++ text.glue ++ name ++ "]";
-    if (@typeInfo(o.Value) == .@"enum" and o.kind != .count) {
+    if (comptime kinds.of(o.Value) == .enumeration and o.kind != .count) {
         var values: []const u8 = "";
         for (value.names(o.Value), 0..) |name, n| values = values ++ (if (n == 0) "" else ", ") ++ name;
         out = out ++ (if (out.len == 0) "" else " ") ++ "[possible" ++ text.glue ++ "values:" ++ text.glue ++ values ++ "]";
@@ -223,12 +224,13 @@ fn defaultText(comptime o: model.Opt) ?[]const u8 {
 }
 
 fn one(comptime V: type, comptime v: V) []const u8 {
-    return switch (@typeInfo(V)) {
-        .int => std.fmt.comptimePrint("{d}", .{v}),
-        .float => std.fmt.comptimePrint("{d}", .{v}),
-        .@"enum" => value.names(V)[value.enumIndex(V, v)],
-        .pointer => v,
-        else => @compileError("ensign: no default text for " ++ @typeName(V)),
+    return switch (kinds.of(V)) {
+        .integer, .float => std.fmt.comptimePrint("{d}", .{v}),
+        .enumeration => value.names(V)[value.enumIndex(V, v)],
+        .text => v,
+        .checked => std.fmt.comptimePrint("{d}", .{v.raw()}),
+        .duration, .size => std.fmt.comptimePrint("{f}", .{v}),
+        .boolean, .none => @compileError("ensign: no default text for " ++ @typeName(V)),
     };
 }
 

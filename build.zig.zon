@@ -6,8 +6,13 @@
     .paths = .{ "build.zig", "build.zig.zon", "src", "README.md", "CHANGELOG.md", "LICENSE" },
     .dependencies = .{
         .xenoglyph = .{
-            .url = "git+https://github.com/pedronaugusto/xenoglyph?ref=v0.1.0#8b0c9ada1370f6b5486fd67a0574ff868cd2c22e",
-            .hash = "xenoglyph-0.1.0-YKXZlVeSCwCPKxKxDurTq6iO0bksf3zwe9X_Fc92KSF0",
+            .url = "git+https://github.com/pedronaugusto/xenoglyph?ref=v0.2.0#2d0f69348c108543a1bcccb256bab60eeaebfba8",
+            .hash = "xenoglyph-0.2.0-YKXZlSBDFQBw0lsIOjklSZa8fKcSxQQcpbSlFOZuEHQ8",
+        },
+
+        .aegis = .{
+            .url = "git+https://github.com/pedronaugusto/aegis?ref=v0.1.3#4e37678e9ff0d78ada850ed4dc00f714bbc8441c",
+            .hash = "aegis-0.1.3-rsxouhQiBwCaQ9NGzUiaQ1xdrFSNYoi3u0Z6sLjI5lrv",
         },
     },
     .dev_dependencies = .{

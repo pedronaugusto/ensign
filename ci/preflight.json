@@ -18,7 +18,8 @@
       "source": "examples/usage.zig",
       "region": "declare",
       "imports": [
-        "ensign"
+        "ensign",
+        "aegis"
       ]
     },
     "zig build docs -- main": {
@@ -52,7 +53,11 @@
     "rules": [
       {"id": "P001", "level": "gate"},
       {"id": "P003", "level": "gate"},
-      {"id": "Z026", "level": "gate"}
+      {"id": "Z026", "level": "gate"},
+      {"id": "A001", "level": "gate"},
+      {"id": "A002", "level": "gate"},
+      {"id": "A003", "level": "gate"},
+      {"id": "A004", "level": "gate"}
     ]
   },
   "glint_paths": [

@@ -48,7 +48,7 @@ fn formatEscaped(bytes: []const u8, w: *Writer) Writer.Error!void {
 /// xenoglyph measures them (a CJK ideograph 2, a combining mark 0, an emoji
 /// 2, a control 0).
 pub fn width(bytes: []const u8) usize {
-    return xenoglyph.width.string(bytes, .{});
+    return xenoglyph.width.string(bytes, .{}).raw();
 }
 
 /// How far compile-time reading of a declaration may go: a declaration of
@@ -108,10 +108,12 @@ pub const Nearest = struct {
     }
 };
 
-/// Writes `text` from column `indent`, breaking lines at spaces so none
-/// passes `limit` columns, unless one word alone is longer. A newline in
-/// `text` breaks the line; each new line starts at `indent`. `column` is
+/// Writes `text` from column `indent`, breaking lines where a line may break
+/// so none passes `limit` columns, unless one piece alone is longer. A newline
+/// in `text` breaks the line; each new line starts at `indent`. `column` is
 /// where the writer stands on entry; the column the text ends at is returned.
+/// Spaces between pieces are written as one; pieces with none between them,
+/// as ideographs have, are written together.
 pub fn wrap(w: *Writer, text: []const u8, indent: usize, column: usize, limit: usize) Writer.Error!usize {
     var col = column;
     var lines = std.mem.splitScalar(u8, text, '\n');
@@ -122,30 +124,76 @@ pub fn wrap(w: *Writer, text: []const u8, indent: usize, column: usize, limit: u
             col = 0;
         }
         first_line = false;
-        var words = std.mem.tokenizeScalar(u8, line, ' ');
-        var first_word = true;
-        while (words.next()) |word| {
-            const wide = wordWidth(word);
+        var pieces: Pieces = .{ .line = line, .breaks = xenoglyph.lines(line) };
+        var first = true;
+        while (pieces.next()) |piece| {
+            const wide = wordWidth(piece.bytes);
             if (col < indent) {
                 try w.splatByteAll(' ', indent - col);
                 col = indent;
-            } else if (!first_word or col > indent) {
-                if (col + 1 + wide > limit and col > indent) {
+            } else if (!first or col > indent) {
+                const gap: usize = @intFromBool(first or piece.spaced);
+                if (col + gap + wide > limit and col > indent) {
                     try w.writeByte('\n');
                     try w.splatByteAll(' ', indent);
                     col = indent;
                 } else {
-                    try w.writeByte(' ');
-                    col += 1;
+                    try w.splatByteAll(' ', gap);
+                    col += gap;
                 }
             }
-            try writeWord(w, word);
+            try writeWord(w, piece.bytes);
             col += wide;
-            first_word = false;
+            first = false;
         }
     }
     return col;
 }
+
+/// What `wrap` places whole: the text between two places a line may break,
+/// without the spaces around it.
+const Piece = struct {
+    bytes: []const u8,
+    /// Spaces stood before it.
+    spaced: bool,
+};
+
+/// The pieces of a line, at xenoglyph's line break opportunities (UAX #14)
+/// with two kept together: none next to a glue, and none between two
+/// printable ASCII characters, so an option, a path or a hyphenated word
+/// stays whole as it is typed, and ASCII text breaks only at spaces.
+const Pieces = struct {
+    line: []const u8,
+    breaks: xenoglyph.line.Iterator,
+    spaced: bool = false,
+
+    fn next(p: *Pieces) ?Piece {
+        while (true) {
+            const start: usize = p.breaks.offset().raw();
+            var end: usize = start;
+            while (p.breaks.nextSpan()) |span| {
+                end = span.end.raw();
+                if (end == p.line.len or !kept(p.line[end - 1], p.line[end])) break;
+            }
+            if (end == start) return null;
+            const raw = p.line[start..end];
+            const bytes = std.mem.trim(u8, raw, " ");
+            const spaced = p.spaced or (bytes.len != 0 and raw[0] == ' ');
+            p.spaced = bytes.len == 0 or raw[raw.len - 1] == ' ';
+            if (bytes.len == 0) continue;
+            return .{ .bytes = bytes, .spaced = spaced };
+        }
+    }
+
+    fn kept(before: u8, after: u8) bool {
+        if (before == glue[0] or after == glue[0]) return true;
+        return printable(before) and printable(after);
+    }
+
+    fn printable(c: u8) bool {
+        return c > ' ' and c < 0x7f;
+    }
+};
 
 /// Joins two words `wrap` keeps on one line; it is written as a space.
 pub const glue = "\x1f";
@@ -212,14 +260,41 @@ test "width is the columns a terminal gives" {
     try std.testing.expectEqual(@as(usize, 6), comptime width("--jobs"));
 }
 
-test "wrap measures wide words and counts glue as a space" {
-    var buffer: [64]u8 = undefined;
+test "wrap measures wide text and counts glue as a space" {
+    var buffer: [128]u8 = undefined;
     var w: Writer = .fixed(&buffer);
-    // 日本語 is six columns: past "  a " it would end at ten, so it breaks at
-    // seven, and so does "b" after it.
+    // 日本語 is six columns and may break between its ideographs: "  a 日"
+    // ends at six, 本 would end at eight, past seven.
     try std.testing.expectEqual(@as(usize, 3), try wrap(&w, "a 日本語 b", 2, 0, 7));
-    try std.testing.expectEqualStrings("  a\n  日本語\n  b", w.buffered());
+    try std.testing.expectEqualStrings("  a 日\n  本語\n  b", w.buffered());
     w = .fixed(&buffer);
     try std.testing.expectEqual(@as(usize, 12), try wrap(&w, "[default:" ++ glue ++ "1]", 0, 0, 80));
     try std.testing.expectEqualStrings("[default: 1]", w.buffered());
+}
+
+test "wrap breaks CJK text where a line may break, and never inside glued or ASCII words" {
+    var buffer: [256]u8 = undefined;
+    var w: Writer = .fixed(&buffer);
+    // Ten columns hold five ideographs; no line may start with the full stop,
+    // which stays with the ideograph before it.
+    const sentence = "日本語のテキストは改行できます。";
+    _ = try wrap(&w, sentence, 0, 0, 10);
+    var joined: [128]u8 = undefined;
+    var len: usize = 0;
+    var lines = std.mem.splitScalar(u8, w.buffered(), '\n');
+    var count: usize = 0;
+    while (lines.next()) |line| : (count += 1) {
+        try std.testing.expect(width(line) <= 10);
+        try std.testing.expect(!std.mem.startsWith(u8, line, "。"));
+        @memcpy(joined[len..][0..line.len], line);
+        len += line.len;
+    }
+    try std.testing.expectEqualStrings(sentence, joined[0..len]);
+    try std.testing.expectEqual(@as(usize, 4), count);
+    w = .fixed(&buffer);
+    _ = try wrap(&w, "use --dry-run or well-known [env:" ++ glue ++ "APP_DRY_RUN]", 0, 0, 12);
+    try std.testing.expectEqualStrings("use\n--dry-run or\nwell-known\n[env: APP_DRY_RUN]", w.buffered());
+    w = .fixed(&buffer);
+    _ = try wrap(&w, "a  b   c", 0, 0, 80);
+    try std.testing.expectEqualStrings("a b c", w.buffered());
 }

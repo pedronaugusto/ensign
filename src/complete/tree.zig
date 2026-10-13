@@ -4,6 +4,8 @@ const std = @import("std");
 const model = @import("../model.zig");
 const text = @import("../text.zig");
 const value = @import("../value.zig");
+/// What a value is: only an enum offers values to complete.
+const kinds = @import("../kinds.zig");
 
 /// What a spelling or a positional takes.
 pub const Kind = enum {
@@ -126,7 +128,7 @@ fn entry(comptime o: model.Opt) Entry {
 
 fn kindOf(comptime o: model.Opt) Kind {
     if (!o.takesValue()) return .flag;
-    if (@typeInfo(o.Value) == .@"enum") return .values;
+    if (comptime kinds.of(o.Value) == .enumeration) return .values;
     return switch (o.meta.hint) {
         .none => .text,
         .file => .file,
@@ -136,7 +138,7 @@ fn kindOf(comptime o: model.Opt) Kind {
 }
 
 fn valuesOf(comptime o: model.Opt) []const []const u8 {
-    if (o.takesValue() and @typeInfo(o.Value) == .@"enum") return value.names(o.Value);
+    if (o.takesValue() and comptime kinds.of(o.Value) == .enumeration) return value.names(o.Value);
     return &.{};
 }
 

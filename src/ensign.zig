@@ -61,4 +61,5 @@ test {
     _ = @import("text.zig");
     _ = @import("lookup.zig");
     _ = @import("value.zig");
+    _ = @import("kinds.zig");
 }

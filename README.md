@@ -11,7 +11,9 @@ Work in progress toward the public cut.
 Requires Zig 0.17.0. Fetch with `zig fetch --save
 git+https://github.com/pedronaugusto/ensign`, then obtain the `ensign` module
 through `b.dependency` and add it to your executable's imports. ensign depends
-on Zig's standard library alone.
+on [xenoglyph](https://github.com/pedronaugusto/xenoglyph), for the columns
+text takes in a terminal, and [aegis](https://github.com/pedronaugusto/aegis),
+whose checked scalars are values a command line gives.
 
 ## Usage
 
@@ -22,10 +24,13 @@ one tagged union holds its subcommands, each a struct of its own. The optional
 <!-- BEGIN GENERATED zig build docs -- declare -->
 ```zig
 const ensign = @import("ensign");
+const aegis = @import("aegis");
 
 const Build = struct {
     release: bool = false,
-    jobs: u16 = 0,
+    jobs: ?aegis.int.Ranged(u16, 1, 256) = null,
+    timeout: aegis.units.Duration(.millisecond, u64) = .fromRaw(30_000),
+    max_size: aegis.units.Bytes(u64) = .fromRaw(64 << 20),
     target: ?[]const u8 = null,
     files: []const []const u8 = &.{},
 
@@ -33,7 +38,9 @@ const Build = struct {
         .about = "Build the project",
         .options = .{
             .release = .{ .short = 'r', .help = "Optimize for speed" },
-            .jobs = .{ .short = 'j', .env = "USAGE_JOBS", .help = "Parallel jobs; 0 is one per core" },
+            .jobs = .{ .short = 'j', .env = "USAGE_JOBS", .help = "Parallel jobs; one per core when not given" },
+            .timeout = .{ .help = "Give up on a step after this long, as 30s or 1m30s" },
+            .max_size = .{ .help = "The largest output, as 4096, 64MiB or 1.5GB" },
             .target = .{ .value_name = "TRIPLE", .help = "The target to build for" },
             .files = .{ .positional = true, .hint = .file, .help = "Files to build" },
         },
@@ -79,8 +86,8 @@ const ensign = @import("ensign");
 // Help, the version and mistakes are answered here, and the program exits.
 const cli = ensign.parseOrExit(Cli, init);
 switch (cli.command) {
-    .build => |b| try out.print("verbose={d} color={t} jobs={d} target={s} files={d}\n", .{
-        cli.verbose, cli.color, b.jobs, b.target orelse "native", b.files.len,
+    .build => |b| try out.print("verbose={d} color={t} jobs={d} timeout={f} target={s} files={d}\n", .{
+        cli.verbose, cli.color, if (b.jobs) |jobs| jobs.raw() else 0, b.timeout, b.target orelse "native", b.files.len,
     }),
     .completions => |c| try ensign.writeCompletion(Cli, c.shell, out, "usage"),
 }
@@ -128,9 +135,20 @@ Each field's type says how it is read:
 | a float | a value in Zig's float syntax, `inf` and `nan` included |
 | an enum | a tag, written with `-` or `_` |
 | `[]const u8` | the argument's bytes, borrowed; `hint = .file`, `.directory` or `.command` tells completions what it names |
+| aegis's `int.Ranged`, `Checked` and `Saturating`, `units.Count`, `id.Id` and `NonZero` | an integer, as above, that the type checks: `Ranged(u16, 1, 256)` takes 1 to 256, `NonZero` refuses 0 |
+| aegis's `units.Duration` | aegis's duration text, exact to the type's unit: `30s`, `1m30s`, `250ms`, `1.5h` |
+| aegis's `units.Bytes` | aegis's size text, binary and decimal units spelled apart: `4096`, `64MiB`, `1.5GB` |
 | `?T` | null unless given |
 | `[]const T` | every occurrence, in order; `delimiter` also splits one argument into several values |
 | a tagged union, or an optional one | its subcommands, each a struct or `void` |
+
+An aegis value is recognized by the parameters its type publishes, never by
+its name, and help shows its default as the command line spells it
+(`[default: 30s]`, `[default: 64MiB]`). A mistake names what was expected: `an
+integer from 1 to 256`, `a duration such as 30s or 1m30s`, `a duration in
+whole milliseconds` for `1.5ms`, or the range a duration or size must be in.
+Other non-exhaustive enums are refused at compile time, as are aegis's
+`Instant`, `Bits` and `Counter`, which have no command-line text.
 
 A field with a default may be left out; one without a default that is not
 optional is required, by the command line or the environment. A `[]const u8`
@@ -158,7 +176,8 @@ dropped when the command line gives another of its group.
 A declaration that cannot be parsed unambiguously does not compile: two
 options with one name, a list positional before another, positionals beside
 subcommands, a subcommand option that hides a global one above it, a boolean
-without a default, a name a shell cannot hold, a type no argument spells. The
+without a default, a name a shell cannot hold, a type no argument spells, a
+non-exhaustive enum. The
 error names the field and what to change.
 
 Each command is a type the compiler builds. Long names and subcommands are
@@ -173,13 +192,16 @@ most a third of it differs.
 Help is generated from the same declaration: the usage line, the description,
 commands, positionals and options by section with their defaults, variables and
 possible values, the global options of the commands above, examples and closing
-sections. It is wrapped to the width asked for; `parseOrExit` asks the terminal
-(`COLUMNS`, then the terminal itself) and wraps at 100 columns at most.
+sections. It is wrapped to the width asked for, where Unicode's line breaking
+rules let a line break (between Chinese or Japanese characters too), though
+never inside an ASCII word, so an option or a path stays whole; `parseOrExit`
+asks the terminal (`COLUMNS`, then the terminal itself) and wraps at 100
+columns at most.
 
 Completion scripts hold the whole command tree. Each finds the subcommand the
 line is in by skipping options and their values as the parser does, then offers
 that command's options, subcommands, enum values, or files, directories or
-programs where the declaration hints at them. The bash script runs on bash 3.2
+programs where the declaration hints at them; an aegis value is free text. The bash script runs on bash 3.2
 and later.
 
 Arguments are bytes. On Windows `std.process.Args` decodes the command line from
@@ -229,6 +251,7 @@ terminal.
 ## Built with
 
 - [Zig](https://ziglang.org) 0.17.0 and its standard library; nothing is linked.
+- [xenoglyph](https://github.com/pedronaugusto/xenoglyph) measures help in terminal columns, and [aegis](https://github.com/pedronaugusto/aegis) gives the checked integers, durations and sizes and their text.
 - [bay](https://github.com/pedronaugusto/bay) runs ensign's development. [preflight](https://github.com/pedronaugusto/preflight) (the source checks, the tests and CI) and [shakedown](https://github.com/pedronaugusto/shakedown) (properties, allocators and benchmarks) are dev dependencies through bay, which a project that depends on ensign never sees.
 
 ## Testing
@@ -241,7 +264,9 @@ holds them: WTF-16 with an unpaired surrogate on Windows. shakedown properties
 write generated values as command lines in every spelling the syntax allows,
 clusters and attached values among them, and parse them back; feed arbitrary
 bytes to the parser, which parses or refuses them with a message and leaks
-nothing; check that a name one edit from an option is answered with a real
+nothing; write aegis values back and parse them to themselves, and take every
+value of a range and the sizes at either end of a representation, refusing
+one past them; check that a name one edit from an option is answered with a real
 one; and wrap help at every width. Parsing a value without lists is held to no
 allocation, a value's lists to exactly what it keeps, and every allocation
 failure is survived without a leak. `bay check-declarations` compiles each

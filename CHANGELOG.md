@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking
+
+- A non-exhaustive enum is refused at compile time, naming the field and what to use instead. It compiled before and then refused every value a command line gave it, since its values beyond the tags have no names.
+
+### Added
+
+- aegis's checked scalars are option and positional values. `int.Ranged`, `Checked` and `Saturating`, `units.Count`, `id.Id` and `NonZero` are read as integers their type checks, so `--jobs` declared `Ranged(u16, 1, 256)` takes 1 to 256; `units.Duration` is read in aegis's duration text (`30s`, `1m30s`, `250ms`) and `units.Bytes` in its size text (`4096`, `64MiB`, `1.5GB`), exact to the type. Each is recognized by the parameters aegis publishes, never by its name. Help shows their defaults and `render` writes them back in the same text; completions take them as free text.
+- A mistake in one of them names what was expected: `an integer from 1 to 256`, `a duration such as 30s or 1m30s`, `a duration in whole milliseconds` for a finer one, or the range a duration or size must be in.
+
+### Fixed
+
+- Help wraps where a line may break by Unicode's rules (UAX #14), through xenoglyph: Chinese and Japanese text breaks between its characters, and never before a closing mark such as `。`. It broke only at spaces, so a CJK description never wrapped. ASCII text still breaks only at spaces, so an option, a path or a hyphenated word stays whole, and glued words never break.
+
+### Changed
+
+- Depends on aegis 0.1.4, for its checked scalars and their text, and pins xenoglyph 0.2.0.
+- The gate holds glint's aegis rules A001 to A004.
+
 ## [0.1.1] - 2026-10-13
 
 ### Fixed

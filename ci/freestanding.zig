@@ -3,11 +3,14 @@
 //! an operating system.
 const std = @import("std");
 const ensign = @import("ensign");
+const aegis = @import("aegis");
 
 const Args = struct {
     level: u8 = 0,
     name: []const u8 = "",
     tags: []const []const u8 = &.{},
+    wait: aegis.units.Duration(.millisecond, u32) = .fromRaw(1500),
+    jobs: aegis.int.Ranged(u8, 1, 64) = .literal(1),
     command: ?union(enum) { run: struct { fast: bool = false } } = null,
     pub const spec: ensign.Spec(@This()) = .{ .name = "free", .options = .{ .level = .{ .short = 'l', .global = true } } };
 };

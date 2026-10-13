@@ -5,6 +5,7 @@
 const std = @import("std");
 const model = @import("model.zig");
 const text = @import("text.zig");
+const kinds = @import("kinds.zig");
 const value = @import("value.zig");
 const help = @import("help.zig");
 const lookup = @import("lookup.zig");
@@ -461,12 +462,18 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
         }
 
         fn one(st: *State, comptime o: model.Opt, bytes: []const u8, env: ?[]const u8) Error!o.Value {
-            return value.parse(o.Value, bytes) orelse invalid(st, o, bytes, env);
+            return switch (value.read(o.Value, bytes)) {
+                .value => |v| v,
+                .refused => |expected| refuse(st, o, bytes, env, expected),
+            };
         }
 
         fn invalid(st: *State, comptime o: model.Opt, bytes: []const u8, env: ?[]const u8) Error {
-            const suggestion = if (@typeInfo(o.Value) == .@"enum") value.suggest(o.Value, bytes) else null;
-            const expected = if (o.kind == .flag) value.expected(bool) else value.expected(o.Value);
+            return refuse(st, o, bytes, env, if (o.kind == .flag) value.expected(bool) else value.expected(o.Value));
+        }
+
+        fn refuse(st: *State, comptime o: model.Opt, bytes: []const u8, env: ?[]const u8, expected: []const u8) Error {
+            const suggestion = if (comptime o.kind != .flag and kinds.of(o.Value) == .enumeration) value.suggest(o.Value, bytes) else null;
             return st.fail(error.InvalidValue, .{ .problem = .invalid_value, .option = display(o), .value = bytes, .expected = expected, .env = env, .suggestion = suggestion });
         }
 
