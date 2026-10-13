@@ -7,6 +7,7 @@ const model = @import("model.zig");
 const text = @import("text.zig");
 const value = @import("value.zig");
 const help = @import("help.zig");
+const lookup = @import("lookup.zig");
 const diagnostic = @import("diagnostic.zig");
 const Allocator = std.mem.Allocator;
 const Writer = std.Io.Writer;
@@ -228,21 +229,21 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
         /// Long names and aliases, each to its option's index.
         const longs = blk: {
             @setEvalBranchQuota(text.branch_quota);
-            var kvs: []const struct { []const u8, u16 } = &.{};
+            var kvs: []const lookup.Entry = &.{};
             for (info.options) |o| for (.{o.long} ++ o.aliases) |name| {
                 kvs = kvs ++ .{.{ name, o.index }};
             };
-            break :blk std.StaticStringMap(u16).initComptime(kvs);
+            break :blk lookup.Table(kvs);
         };
 
         /// The same, for the options commands below may use.
         const global_longs = blk: {
             @setEvalBranchQuota(text.branch_quota);
-            var kvs: []const struct { []const u8, u16 } = &.{};
+            var kvs: []const lookup.Entry = &.{};
             for (info.globals()) |o| for (.{o.long} ++ o.aliases) |name| {
                 kvs = kvs ++ .{.{ name, o.index }};
             };
-            break :blk std.StaticStringMap(u16).initComptime(kvs);
+            break :blk lookup.Table(kvs);
         };
 
         const shorts = table(false);
@@ -261,11 +262,11 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
         /// Subcommand names and aliases, each to its variant's position.
         const subs = blk: {
             @setEvalBranchQuota(text.branch_quota);
-            var kvs: []const struct { []const u8, u16 } = &.{};
+            var kvs: []const lookup.Entry = &.{};
             if (info.commands) |c| for (c.list, 0..) |sub, n| for (.{sub.name} ++ sub.aliases) |name| {
                 kvs = kvs ++ .{.{ name, n }};
             };
-            break :blk std.StaticStringMap(u16).initComptime(kvs);
+            break :blk lookup.Table(kvs);
         };
 
         /// Whether a short option is a digit here or above, so that `-5`
@@ -358,12 +359,12 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
         /// only an option commands below may use. Asks the commands above
         /// when `only_global` and this one has none.
         fn applyLong(self: *Self, st: *State, cursor: anytype, spelled: []const u8, name: []const u8, attached: ?[]const u8, only_global: bool) Error!bool {
-            const map = if (only_global) global_longs else longs;
-            if (map.get(name)) |index| {
+            const found = if (only_global) global_longs.get(name) else longs.get(name);
+            if (found) |index| {
                 try self.apply(st, cursor, index, spelled, attached, false);
                 return true;
             }
-            if (std.mem.startsWith(u8, name, "no-")) if (map.get(name[3..])) |index| {
+            if (std.mem.startsWith(u8, name, "no-")) if (if (only_global) global_longs.get(name[3..]) else longs.get(name[3..])) |index| {
                 if (isNegatable(index)) {
                     try self.apply(st, cursor, index, spelled, attached, true);
                     return true;
@@ -583,7 +584,7 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
                     if (std.mem.eql(u8, @tagName(f), o.field)) break true;
                 } else false;
                 if (member) inline for (group) |f| {
-                    if (self.seen.isSet(indexOf(@tagName(f)))) return true;
+                    if (self.seen.isSet(comptime indexOf(@tagName(f)))) return true;
                 };
             }
             return false;

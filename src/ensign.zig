@@ -59,5 +59,6 @@ test {
     _ = completion;
     _ = @import("model.zig");
     _ = @import("text.zig");
+    _ = @import("lookup.zig");
     _ = @import("value.zig");
 }
