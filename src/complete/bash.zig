@@ -21,10 +21,10 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\            COMPREPLY=($(compgen -P "$3" -W "$REPLY" -- "$2")) ;;
         \\        file)
         \\            COMPREPLY=($(compgen -P "$3" -f -- "$2"))
-        \\            [ -z "$3" ] && type compopt >/dev/null 2>&1 && compopt -o filenames ;;
+        \\            [ -z "$3" ] && type compopt >/dev/null 2>&1 && compopt -o filenames 2>/dev/null ;;
         \\        directory)
         \\            COMPREPLY=($(compgen -P "$3" -d -- "$2"))
-        \\            [ -z "$3" ] && type compopt >/dev/null 2>&1 && compopt -o filenames ;;
+        \\            [ -z "$3" ] && type compopt >/dev/null 2>&1 && compopt -o filenames 2>/dev/null ;;
         \\        command) COMPREPLY=($(compgen -P "$3" -c -- "$2")) ;;
         \\        *) COMPREPLY=() ;;
         \\    esac
