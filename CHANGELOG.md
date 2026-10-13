@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-13
+
 ### Added
 
 - `Spec(T)`: a command's arguments declared as a struct, its subcommands as a tagged union, and their spelling and help beside them; the parser is generated at compile time.
