@@ -28,8 +28,8 @@ pub fn Pages(comptime chain: []const type, comptime names: []const []const u8) t
         fn writeUsage(w: *Writer, program: []const u8, width: usize) Writer.Error!void {
             try w.writeAll("Usage: ");
             try page.writeName(w, program);
-            const indent = @min(7 + text.width(program) + page.path.len + 1, 24);
-            var col = 7 + text.width(program) + page.path.len;
+            var col = 7 + text.width(program) + (if (page.path.len == 0) 0 else 1 + page.path.len);
+            const indent = @min(col + 1, 24);
             inline for (comptime usageWords(info)) |word| {
                 col = try text.wrap(w, word, indent, col, @max(width, min_width));
             }
@@ -86,7 +86,7 @@ const Row = struct {
 
 fn writeRow(w: *Writer, comptime row: Row, column_cap: usize, width: usize) Writer.Error!void {
     // Narrow terminals take a narrower left column.
-    const column = @min(column_cap, width * 2 / 5);
+    const column = @min(column_cap, width / 2);
     const left = comptime text.width(row.left);
     try w.writeAll(row.left);
     var col: usize = left;
@@ -236,7 +236,7 @@ fn usageWords(comptime i: model.Info) []const []const u8 {
     for (i.options) |o| {
         if (o.meta.hidden) continue;
         if (o.required) {
-            words = words ++ .{"--" ++ o.long ++ " <" ++ o.value_name ++ ">" ++ (if (o.kind == .list) "..." else "")};
+            words = words ++ .{"--" ++ o.long ++ text.glue ++ "<" ++ o.value_name ++ ">" ++ (if (o.kind == .list) "..." else "")};
         } else optional = true;
     }
     if (optional) words = .{"[options]"} ++ words;

@@ -3,6 +3,7 @@ const gantry = @import("gantry");
 
 pub const layers: []const gantry.rules.Layer = &.{
     .{ .name = "text", .patterns = &.{"src/text.zig"} },
+    .{ .name = "lookup", .patterns = &.{"src/lookup.zig"} },
     .{ .name = "declaration", .patterns = &.{"src/spec.zig"} },
     .{ .name = "model", .patterns = &.{"src/model.zig"} },
     .{ .name = "values and diagnostics", .patterns = &.{ "src/value.zig", "src/diagnostic.zig" } },
@@ -33,6 +34,7 @@ pub const references: []const gantry.rules.ReferenceRule = &package_references;
 
 pub const required = [_][]const u8{
     "src/text.zig",
+    "src/lookup.zig",
     "src/spec.zig",
     "src/model.zig",
     "src/value.zig",
