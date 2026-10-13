@@ -1,0 +1,60 @@
+{
+  "sources": [
+    "src"
+  ],
+  "test_roots": [
+    "src/tests.zig"
+  ],
+  "test_support": [
+    "src/testing/**"
+  ],
+  "test_dependencies": [
+    "shakedown"
+  ],
+  "function_exceptions": {},
+  "layout_exceptions": {},
+  "docs": {
+    "zig build docs -- declare": {
+      "source": "examples/usage.zig",
+      "region": "declare",
+      "imports": [
+        "ensign"
+      ]
+    },
+    "zig build docs -- main": {
+      "source": "examples/usage.zig",
+      "region": "main",
+      "imports": [
+        "ensign"
+      ]
+    },
+    "zig build docs -- handled": {
+      "source": "examples/usage.zig",
+      "region": "handled",
+      "imports": [
+        "ensign"
+      ]
+    }
+  },
+  "extra_checks": [
+    [
+      "zig",
+      "build",
+      "check-consumer"
+    ]
+  ],
+  "glint": {
+    "rules": [
+      {"id": "P001", "level": "gate"},
+      {"id": "P003", "level": "gate"},
+      {"id": "Z026", "level": "gate"}
+    ]
+  },
+  "glint_paths": [
+    "src",
+    "bench",
+    "examples",
+    "ci",
+    "build.zig"
+  ]
+}
