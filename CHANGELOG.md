@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-13
+
 ### Added
 
 - `Option.raw`: a positional list of text that takes every argument from the first the command does not read as one of its options, as given, for programs that pass arguments on to another.
