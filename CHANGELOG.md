@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-13
+
 ### Breaking
 
 - A non-exhaustive enum is refused at compile time, naming the field and what to use instead. It compiled before and then refused every value a command line gave it, since its values beyond the tags have no names.
