@@ -1,6 +1,6 @@
 .{
     .name = .ensign,
-    .version = "0.2.2",
+    .version = "0.2.3",
     .minimum_zig_version = "0.17.0",
     .fingerprint = 0x71c3b8840f13e3e9,
     .paths = .{ "build.zig", "build.zig.zon", "src", "README.md", "CHANGELOG.md", "LICENSE" },
