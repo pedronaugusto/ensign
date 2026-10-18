@@ -15,7 +15,6 @@ const Allocator = std.mem.Allocator;
 const Writer = std.Io.Writer;
 const Diagnostic = diagnostic.Diagnostic;
 const Page = diagnostic.Page;
-const Problem = diagnostic.Problem;
 
 /// What parsing can fail with. Each error but `OutOfMemory` fills the
 /// `Diagnostic` when one is given.

@@ -156,9 +156,9 @@ pub fn Commands(comptime T: type) type {
     const fields = @typeInfo(T).@"struct";
     for (fields.field_types) |F| {
         if (!isCommands(F)) continue;
-        const U = @typeInfo(Unwrapped(F)).@"union";
+        const variants = @typeInfo(Unwrapped(F)).@"union";
         const default: Command = .{};
-        return @Struct(.auto, null, U.field_names, &@splat(Command), &@splat(.{ .default_value_ptr = &default }));
+        return @Struct(.auto, null, variants.field_names, &@splat(Command), &@splat(.{ .default_value_ptr = &default }));
     }
     return struct {};
 }
