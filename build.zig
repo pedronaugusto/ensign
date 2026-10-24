@@ -93,6 +93,8 @@ pub fn dev(b: *std.Build, tools: type) void {
     tools.preflight.addCi(b, p, .{
         .tests = test_step,
         .portable_tests = true,
+        // The completion tests require bash on Linux, the riscv64 machine's too.
+        .vm_packages = &.{"bash"},
         // The release tier runs the suite with safety on, fuzzes its
         // properties and runs it under ThreadSanitizer.
         .hardened = .{ .fuzz_step = "unit", .tsan_step = "unit" },
