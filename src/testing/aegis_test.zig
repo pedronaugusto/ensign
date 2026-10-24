@@ -4,6 +4,9 @@
 //! properties over their round trip and the edges of their ranges.
 const std = @import("std");
 const aegis = @import("aegis");
+// Another copy of aegis: what a program pinning another aegis version than
+// ensign's builds beside ensign's, whose types are never ensign's copy's.
+const other_aegis = @import("other_aegis");
 const shake = @import("shakedown");
 const ensign = @import("../ensign.zig");
 const support = @import("support.zig");
@@ -57,6 +60,24 @@ test "aegis integers are read as integers and checked by their type" {
     try support.fails(Run, &.{"--node=0"}, error.InvalidValue, "program: invalid value '0' for '--node': expected an integer from 1 to 4294967295");
     try support.fails(Run, &.{"--offset=0"}, error.InvalidValue, "program: invalid value '0' for '--offset': expected a nonzero integer from -128 to 127");
     try support.fails(Run, &.{"--keep=256"}, error.InvalidValue, "program: invalid value '256' for '--keep': expected an integer from 0 to 255");
+}
+
+test "aegis values made by another copy of aegis are read as aegis values" {
+    comptime std.debug.assert(other_aegis.int.Ranged(u16, 1, 256) != Jobs);
+    const Other = struct {
+        jobs: ?other_aegis.int.Ranged(u16, 1, 4096) = null,
+        timeout: other_aegis.units.Duration(.millisecond, u64) = .fromRaw(30_000),
+        workers: other_aegis.int.Checked(u8) = .init(4),
+
+        pub const spec: ensign.Spec(@This()) = .{ .options = .{
+            .jobs = .{ .short = 'j', .help = "Parallel jobs" },
+        } };
+    };
+    const v = try support.parsed(Other, &.{ "-j", "4096", "--timeout=1m30s", "--workers=8" });
+    try std.testing.expectEqual(@as(u16, 4096), v.jobs.?.raw());
+    try std.testing.expectEqual(@as(u64, 90_000), v.timeout.raw());
+    try std.testing.expectEqual(@as(u8, 8), v.workers.raw());
+    try support.fails(Other, &.{"--jobs=0"}, error.InvalidValue, "program: invalid value '0' for '--jobs': expected an integer from 1 to 4096");
 }
 
 test "durations and sizes take aegis's text, exact and in range" {

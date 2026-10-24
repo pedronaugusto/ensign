@@ -1,7 +1,11 @@
 //! What a value's type is on the command line: one of Zig's scalars, or one
-//! of aegis's checked scalars. An aegis type is recognized by rebuilding it
-//! from the parameters it publishes and comparing, never by its name, so a
-//! type is taken for aegis's only when it is aegis's.
+//! of aegis's checked scalars. An aegis type is recognized by the
+//! `aegis_scalar` declaration aegis puts on each, which also states its
+//! parameters, never by its name or by rebuilding it: a program pinning
+//! another aegis version than ensign's builds another copy of aegis, whose
+//! types are never equal to the ones ensign's copy makes, while the
+//! declaration reads the same in both. A value is made only through the
+//! type's own checked functions, as the declaration's contract names them.
 const std = @import("std");
 const aegis = @import("aegis");
 
@@ -26,7 +30,8 @@ pub const Kind = enum {
     none,
 };
 
-/// Each aegis scalar a command line gives.
+/// Each aegis scalar a command line gives, as its `aegis_scalar` literal
+/// names it.
 pub const Family = enum { ranged, checked, saturating, count, id, nonzero, duration, bytes };
 
 /// The kind of `V`.
@@ -50,34 +55,21 @@ fn ofFamily(f: Family) Kind {
     };
 }
 
-/// The aegis scalar `V` is, or null. The declarations only one family
-/// publishes choose the constructor to rebuild `V` with, so a type is never
-/// rebuilt with parameters its own family would refuse. An `Instant` (a
-/// point on a clock), `Bits` and an id `Counter` have no command-line text.
+/// The aegis scalar `V` is, or null, from whichever copy of aegis made it.
+/// A contract other than 1, the one this ensign reads, does not compile:
+/// its fields or functions may have changed. An `Instant` (a point on a clock), `Bits` and an id `Counter` have no
+/// command-line text.
 pub fn family(comptime V: type) ?Family {
     switch (@typeInfo(V)) {
         .@"struct", .@"enum" => {},
         else => return null,
     }
-    if (!@hasDecl(V, "Representation") or @TypeOf(V.Representation) != type) return null;
-    const R = V.Representation;
-    if (@typeInfo(R) != .int) return null;
-    if (@typeInfo(V) == .@"struct") {
-        if (V == aegis.int.Checked(R)) return .checked;
-        if (V == aegis.int.Saturating(R)) return .saturating;
-        return null;
-    }
-    if (@hasDecl(V, "minimum")) return if (V == aegis.int.Ranged(R, V.minimum, V.maximum)) .ranged else null;
-    if (@hasDecl(V, "Clock")) return null;
-    if (@hasDecl(V, "Scale")) return if (V == aegis.units.Duration(V.Scale, R)) .duration else null;
-    if (@hasDecl(V, "Step")) {
-        if (V == aegis.id.Id(V.Domain, R)) return .id;
-        if (V == aegis.id.NonZero(V.Domain, R)) return .nonzero;
-        return null;
-    }
-    if (@hasDecl(V, "Domain")) return if (V == aegis.units.Count(V.Domain, R)) .count else null;
-    if (V == aegis.units.Bytes(R)) return .bytes;
-    return null;
+    if (!@hasDecl(V, "aegis_scalar")) return null;
+    const scalar = V.aegis_scalar;
+    if (@typeInfo(@TypeOf(scalar)) != .@"struct" or !@hasField(@TypeOf(scalar), "contract")) return null;
+    if (scalar.contract != 1) @compileError(std.fmt.comptimePrint("ensign: {s} is an aegis scalar of contract {d}; this ensign reads contract 1", .{ @typeName(V), scalar.contract }));
+    const name = @tagName(scalar.kind);
+    return if (@hasField(Family, name)) @field(Family, name) else null;
 }
 
 /// The integer a `checked` value of `V` is read as and written from, the
@@ -85,13 +77,13 @@ pub fn family(comptime V: type) ?Family {
 pub fn Checked(comptime V: type) type {
     const f = family(V).?;
     return struct {
-        pub const Repr = V.Representation;
+        pub const Repr = V.aegis_scalar.representation;
         pub const min: Repr = switch (f) {
-            .ranged => V.minimum,
+            .ranged => V.aegis_scalar.minimum,
             .nonzero => if (@typeInfo(Repr).int.signedness == .unsigned) 1 else std.math.minInt(Repr),
             else => std.math.minInt(Repr),
         };
-        pub const max: Repr = if (f == .ranged) V.maximum else std.math.maxInt(Repr);
+        pub const max: Repr = if (f == .ranged) V.aegis_scalar.maximum else std.math.maxInt(Repr);
         /// A signed `NonZero` takes both sides of zero but not zero itself.
         pub const skips_zero = f == .nonzero and @typeInfo(Repr).int.signedness == .signed;
 

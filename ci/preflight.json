@@ -9,7 +9,8 @@
     "src/testing/**"
   ],
   "test_dependencies": [
-    "shakedown"
+    "shakedown",
+    "other_aegis"
   ],
   "function_exceptions": {},
   "layout_exceptions": {},

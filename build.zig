@@ -25,6 +25,10 @@ pub fn dev(b: *std.Build, tools: type) void {
     const library = package.artifact("ensign");
     const shakedown = b.dependency("shakedown", .{ .target = target, .optimize = optimize });
     const filters = if (test_filter) |filter| &.{filter} else &.{};
+    // A second copy of aegis, from its sources at another path: what a program
+    // pinning another aegis version than ensign's builds beside ensign's.
+    const aegis_sources = b.addWriteFiles().addCopyDirectory(p.dependency("aegis", .{ .target = target, .optimize = optimize }).path("src"), "aegis", .{});
+    const other_aegis = b.createModule(.{ .root_source_file = aegis_sources.path(b, "root.zig"), .target = target, .optimize = optimize });
     const tests = b.addTest(.{
         .name = "ensign-tests",
         .filters = filters,
@@ -36,6 +40,7 @@ pub fn dev(b: *std.Build, tools: type) void {
                 .{ .name = "shakedown", .module = shakedown.module("shakedown") },
                 .{ .name = "xenoglyph", .module = p.dependency("xenoglyph", .{ .target = target, .optimize = optimize }).module("xenoglyph") },
                 .{ .name = "aegis", .module = p.dependency("aegis", .{ .target = target, .optimize = optimize }).module("aegis") },
+                .{ .name = "other_aegis", .module = other_aegis },
             },
         }),
     });
@@ -121,6 +126,7 @@ const rejected = [_]struct { name: []const u8, error_text: []const u8 }{
     .{ .name = "name_with_space", .error_text = "must start with a letter or digit and hold only letters, digits, '-', '_', '.' or '+'" },
     .{ .name = "unsupported_type", .error_text = "is no command-line value; use an integer, float, enum, bool, []const u8, an aegis integer, Duration or Bytes, or a slice of one" },
     .{ .name = "nonexhaustive_enum", .error_text = "is a non-exhaustive enum, whose values have no names to read; make it exhaustive, or use an aegis integer, Duration or Bytes" },
+    .{ .name = "later_aegis_contract", .error_text = "is an aegis scalar of contract 2; this ensign reads contract 1" },
     .{ .name = "untyped_spec", .error_text = "must be declared `pub const spec: ensign.Spec(@This())`" },
     .{ .name = "global_hides_builtin", .error_text = "its -V flag hides the global option of global_hides_builtin.T" },
 };

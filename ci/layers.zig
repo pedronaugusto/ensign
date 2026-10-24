@@ -29,6 +29,7 @@ const package_references = [_]gantry.rules.ReferenceRule{
         "shakedown",
         "xenoglyph",
         "aegis",
+        "other_aegis",
     } },
     .{ .name = "source siblings", .suffix = ".zig", .relative = true, .except_targets = &.{"src/**"} },
 };

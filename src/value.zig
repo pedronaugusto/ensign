@@ -51,10 +51,10 @@ fn Refusals(comptime V: type) type {
         const duration = kinds.of(V) == .duration;
         const bounds = std.fmt.comptimePrint("{s} from {f} to {f}", .{
             if (duration) "a duration" else "a size",
-            V.fromRaw(std.math.minInt(V.Representation)),
-            V.fromRaw(std.math.maxInt(V.Representation)),
+            V.fromRaw(std.math.minInt(V.aegis_scalar.representation)),
+            V.fromRaw(std.math.maxInt(V.aegis_scalar.representation)),
         });
-        const fine = if (duration) "a duration in whole " ++ @tagName(V.Scale) ++ "s" else "a whole number of bytes";
+        const fine = if (duration) "a duration in whole " ++ @tagName(V.aegis_scalar.unit) ++ "s" else "a whole number of bytes";
 
         fn of(err: V.ParseError) []const u8 {
             return switch (err) {

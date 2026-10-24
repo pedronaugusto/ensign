@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- An aegis integer, Duration or Bytes from a program pinning another aegis version than ensign's was refused, a `Ranged` as "a non-exhaustive enum, whose values have no names to read" (bay's `--jobs` under a plain `zig build`): ensign recognized aegis's scalars by rebuilding them with its own copy of aegis, and two versions are two copies whose types are never equal. It now reads the `aegis_scalar` declaration each one carries (aegis 0.1.18), the same in every copy, at contract 1: its bounds and unit come from it, a value is made only through the type's own checked functions, and a later contract does not compile, named by its number.
+
 ## [0.2.4] - 2026-10-24
 
 ### Changed
