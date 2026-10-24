@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Pins xenoglyph 0.4.2 and aegis 0.1.17.
+
 ## [0.2.3] - 2026-10-14
 
 ### Changed
