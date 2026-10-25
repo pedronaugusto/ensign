@@ -164,10 +164,11 @@ pub fn Commands(comptime T: type) type {
 }
 
 /// Whether a field of this type holds subcommands: a tagged union or an
-/// optional one.
+/// optional one, unless the union reads itself as one value (it declares
+/// `ensign_value`).
 pub fn isCommands(comptime F: type) bool {
     return switch (@typeInfo(Unwrapped(F))) {
-        .@"union" => |u| u.tag_type != null,
+        .@"union" => |u| u.tag_type != null and !@hasDecl(Unwrapped(F), "ensign_value"),
         else => false,
     };
 }

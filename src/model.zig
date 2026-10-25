@@ -245,7 +245,7 @@ fn isList(comptime F: type) bool {
 
 fn checkValue(comptime where: []const u8, comptime V: type) void {
     switch (kinds.of(V)) {
-        .integer, .float, .checked, .duration, .size => {},
+        .integer, .float, .checked, .duration, .size, .custom => {},
         .enumeration => for (@typeInfo(V).@"enum".field_names) |tag| checkName(V, text.dashed(tag), "enum value"),
         .text => {
             const p = @typeInfo(V).pointer;
@@ -255,7 +255,7 @@ fn checkValue(comptime where: []const u8, comptime V: type) void {
         .boolean, .none => if (@typeInfo(V) == .@"enum")
             @compileError("ensign: " ++ where ++ ": " ++ @typeName(V) ++ " is a non-exhaustive enum, whose values have no names to read; make it exhaustive, or use an aegis integer, Duration or Bytes")
         else
-            @compileError("ensign: " ++ where ++ ": " ++ @typeName(V) ++ " is no command-line value; use an integer, float, enum, bool, []const u8, an aegis integer, Duration or Bytes, or a slice of one"),
+            @compileError("ensign: " ++ where ++ ": " ++ @typeName(V) ++ " is no command-line value; use an integer, float, enum, bool, []const u8, an aegis integer, Duration or Bytes, a type declaring ensign_value, or a slice of one"),
     }
 }
 

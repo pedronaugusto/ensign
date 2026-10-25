@@ -17,8 +17,9 @@ pub fn Read(comptime V: type) type {
 
 /// Reads one value of `V`. Integers take an optional sign, `0x`, `0o` or
 /// `0b`, and `_` between digits; enums take the tag with `-` or `_`; text
-/// is taken as it is; an aegis duration or size takes aegis's text, and an
-/// aegis integer is checked by its type.
+/// is taken as it is; an aegis duration or size takes aegis's text, an
+/// aegis integer is checked by its type, and a type that reads itself is
+/// read by its own `parse`.
 pub fn read(comptime V: type, bytes: []const u8) Read(V) {
     const refused: Read(V) = .{ .refused = expected(V) };
     return switch (comptime kinds.of(V)) {
@@ -33,6 +34,7 @@ pub fn read(comptime V: type, bytes: []const u8) Read(V) {
             break :blk if (C.make(raw)) |v| .{ .value = v } else refused;
         },
         .duration, .size => if (V.parse(bytes)) |v| .{ .value = v } else |err| .{ .refused = Refusals(V).of(err) },
+        .custom => if (kinds.Custom(V).parse(bytes)) |v| .{ .value = v } else |err| .{ .refused = kinds.Custom(V).refusal(err) },
         .none => @compileError("ensign: no parser for " ++ @typeName(V)),
     };
 }
@@ -123,6 +125,7 @@ pub fn expected(comptime V: type) []const u8 {
         .checked => range(kinds.Checked(V).Repr, kinds.Checked(V).min, kinds.Checked(V).max, kinds.Checked(V).skips_zero),
         .duration => "a duration such as 30s or 1m30s",
         .size => "a size such as 4096, 64MiB or 1.5GB",
+        .custom => kinds.Custom(V).expected,
         .none => @compileError("ensign: no parser for " ++ @typeName(V)),
     };
     return out;
@@ -141,7 +144,7 @@ pub fn write(comptime V: type, w: *Writer, v: V) Writer.Error!void {
         .enumeration => try w.writeAll(names(V)[enumIndex(V, v)]),
         .text => try w.writeAll(v),
         .checked => try w.print("{d}", .{v.raw()}),
-        .duration, .size => try v.format(w),
+        .duration, .size, .custom => try v.format(w),
         .none => @compileError("ensign: no writer for " ++ @typeName(V)),
     }
 }

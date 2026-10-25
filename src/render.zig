@@ -148,8 +148,9 @@ pub fn equal(comptime F: type, a: F, b: F) bool {
             return true;
         },
         .float => |f| return @as(@Int(.unsigned, f.bits), @bitCast(a)) == @as(@Int(.unsigned, f.bits), @bitCast(b)),
-        // aegis's `Checked` and `Saturating` hold their integer in a struct.
-        .@"struct" => return std.meta.eql(a, b),
+        // aegis's `Checked` and `Saturating` hold their integer in a struct,
+        // and a type that reads itself may be any aggregate.
+        .@"struct", .@"union" => return std.meta.eql(a, b),
         else => return a == b,
     }
 }

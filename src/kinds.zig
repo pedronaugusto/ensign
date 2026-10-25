@@ -1,11 +1,14 @@
-//! What a value's type is on the command line: one of Zig's scalars, or one
-//! of aegis's checked scalars. An aegis type is recognized by the
+//! What a value's type is on the command line: one of Zig's scalars, one of
+//! aegis's checked scalars, or a type that reads itself. An aegis type is
+//! recognized by the
 //! `aegis_scalar` declaration aegis puts on each, which also states its
 //! parameters, never by its name or by rebuilding it: a program pinning
 //! another aegis version than ensign's builds another copy of aegis, whose
 //! types are never equal to the ones ensign's copy makes, while the
 //! declaration reads the same in both. A value is made only through the
 //! type's own checked functions, as the declaration's contract names them.
+//! A type that reads itself says so the same way, in an `ensign_value`
+//! declaration naming its own `parse`, and writes itself with std's `format`.
 const std = @import("std");
 const aegis = @import("aegis");
 
@@ -25,6 +28,9 @@ pub const Kind = enum {
     duration,
     /// `aegis.units.Bytes`, in aegis's size text: `4096`, `64MiB`.
     size,
+    /// A type that reads itself: it declares `ensign_value`, naming its own
+    /// `parse`, and writes itself with `format`.
+    custom,
     /// No command line spells it: a non-exhaustive enum aegis does not
     /// publish as one of the above, an untagged aggregate, and the rest.
     none,
@@ -41,8 +47,8 @@ pub fn of(comptime V: type) Kind {
         .float => .float,
         .bool => .boolean,
         .pointer => .text,
-        .@"enum" => |e| if (family(V)) |f| ofFamily(f) else if (e.mode == .exhaustive) .enumeration else .none,
-        .@"struct" => if (family(V)) |f| ofFamily(f) else .none,
+        .@"enum" => |e| if (custom(V)) .custom else if (family(V)) |f| ofFamily(f) else if (e.mode == .exhaustive) .enumeration else .none,
+        .@"struct", .@"union" => if (custom(V)) .custom else if (family(V)) |f| ofFamily(f) else .none,
         else => .none,
     };
 }
@@ -70,6 +76,79 @@ pub fn family(comptime V: type) ?Family {
     if (scalar.contract != 1) @compileError(std.fmt.comptimePrint("ensign: {s} is an aegis scalar of contract {d}; this ensign reads contract 1", .{ @typeName(V), scalar.contract }));
     const name = @tagName(scalar.kind);
     return if (@hasField(Family, name)) @field(Family, name) else null;
+}
+
+/// Whether `V` reads itself: it declares `ensign_value`. The declaration is
+/// checked here, so a mistake in it names the type: a contract other than 1,
+/// the one this ensign reads, an `aegis_scalar` beside it, a `parse` of
+/// another shape, a missing `format`, or words for an error `parse` never
+/// returns.
+pub fn custom(comptime V: type) bool {
+    if (!@hasDecl(V, "ensign_value")) return false;
+    const d = V.ensign_value;
+    const D = @TypeOf(d);
+    const where = "ensign: " ++ @typeName(V) ++ ".ensign_value";
+    if (@typeInfo(D) != .@"struct") @compileError(where ++ " is a literal: .{ .contract = 1, .expected = \"...\", .parse = parse }");
+    if (!@hasField(D, "contract")) @compileError(where ++ " names no contract; this ensign reads contract 1");
+    if (d.contract != 1) @compileError(std.fmt.comptimePrint("{s} is of contract {d}; this ensign reads contract 1", .{ where, d.contract }));
+    if (@hasDecl(V, "aegis_scalar")) @compileError(where ++ ": the type is also an aegis scalar, which ensign reads by aegis_scalar; declare one of them");
+    if (!@hasField(D, "expected")) @compileError(where ++ " says nothing of what a value must be; give .expected, which completes \"expected ...\"");
+    if (!@hasField(D, "parse")) @compileError(where ++ " names no parse function: .parse = fn ([]const u8) E!" ++ @typeName(V) ++ " or ?" ++ @typeName(V));
+    _ = Custom(V).checked;
+    if (!@hasDecl(V, "format") or @typeInfo(@TypeOf(V.format)) != .@"fn") @compileError(where ++ ": " ++ @typeName(V) ++ " has no format method, which help and render write it with: pub fn format(self, w: *std.Io.Writer) std.Io.Writer.Error!void");
+    return true;
+}
+
+/// How a type that reads itself is read: its `parse`, what a value must be,
+/// and the words for each error `parse` returns.
+pub fn Custom(comptime V: type) type {
+    const d = V.ensign_value;
+    const where = "ensign: " ++ @typeName(V) ++ ".ensign_value.parse";
+    const F = @typeInfo(@TypeOf(d.parse));
+    if (F != .@"fn" or F.@"fn".param_types.len != 1 or F.@"fn".param_types[0] != []const u8)
+        @compileError(where ++ " takes the argument's bytes: fn ([]const u8) E!" ++ @typeName(V) ++ " or ?" ++ @typeName(V));
+    const R = F.@"fn".return_type orelse @compileError(where ++ " returns a type known at compile time");
+    const shape: enum { errors, optional } = switch (@typeInfo(R)) {
+        .error_union => |e| if (e.payload == V) .errors else @compileError(where ++ " returns " ++ @typeName(R) ++ ", not E!" ++ @typeName(V)),
+        .optional => |o| if (o.child == V) .optional else @compileError(where ++ " returns " ++ @typeName(R) ++ ", not ?" ++ @typeName(V)),
+        else => @compileError(where ++ " returns " ++ @typeName(R) ++ ": E!" ++ @typeName(V) ++ " or ?" ++ @typeName(V)),
+    };
+    return struct {
+        /// What `parse` fails with: its error set, or `error{Refused}` for an optional.
+        pub const Failure = if (shape == .errors) @typeInfo(R).error_union.error_set else error{Refused};
+        /// Completes "expected ...".
+        pub const expected: []const u8 = d.expected;
+
+        /// Each error `.refused` names is one `parse` returns.
+        pub const checked = blk: {
+            if (@hasField(@TypeOf(d), "refused")) {
+                if (shape == .optional) @compileError("ensign: " ++ @typeName(V) ++ ".ensign_value.refused names errors, and parse returns an optional");
+                const names = @typeInfo(@TypeOf(d.refused)).@"struct".field_names;
+                for (names) |name| {
+                    const known = for (@typeInfo(Failure).error_set.error_names orelse &.{}) |e| {
+                        if (std.mem.eql(u8, e, name)) break true;
+                    } else false;
+                    if (!known) @compileError("ensign: " ++ @typeName(V) ++ ".ensign_value.refused names error." ++ name ++ ", which parse never returns");
+                }
+            }
+            break :blk true;
+        };
+
+        /// The value `bytes` hold, or what `parse` failed with.
+        pub fn parse(bytes: []const u8) Failure!V {
+            return if (shape == .errors) d.parse(bytes) else d.parse(bytes) orelse error.Refused;
+        }
+
+        /// The words for `err`: its own when the declaration gives them, else `expected`.
+        pub fn refusal(err: Failure) []const u8 {
+            if (@hasField(@TypeOf(d), "refused")) {
+                switch (err) {
+                    inline else => |e| if (@hasField(@TypeOf(d.refused), @errorName(e))) return @field(d.refused, @errorName(e)),
+                }
+            }
+            return expected;
+        }
+    };
 }
 
 /// The integer a `checked` value of `V` is read as and written from, the

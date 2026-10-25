@@ -229,7 +229,7 @@ fn one(comptime V: type, comptime v: V) []const u8 {
         .enumeration => value.names(V)[value.enumIndex(V, v)],
         .text => v,
         .checked => std.fmt.comptimePrint("{d}", .{v.raw()}),
-        .duration, .size => std.fmt.comptimePrint("{f}", .{v}),
+        .duration, .size, .custom => std.fmt.comptimePrint("{f}", .{v}),
         .boolean, .none => @compileError("ensign: no default text for " ++ @typeName(V)),
     };
 }

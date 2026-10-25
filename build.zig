@@ -124,11 +124,16 @@ const rejected = [_]struct { name: []const u8, error_text: []const u8 }{
     .{ .name = "bool_without_default", .error_text = "a boolean needs a default, or `?bool` to tell absent from false" },
     .{ .name = "global_hidden_below", .error_text = "--color hides the global option of global_hidden_below.T" },
     .{ .name = "name_with_space", .error_text = "must start with a letter or digit and hold only letters, digits, '-', '_', '.' or '+'" },
-    .{ .name = "unsupported_type", .error_text = "is no command-line value; use an integer, float, enum, bool, []const u8, an aegis integer, Duration or Bytes, or a slice of one" },
+    .{ .name = "unsupported_type", .error_text = "is no command-line value; use an integer, float, enum, bool, []const u8, an aegis integer, Duration or Bytes, a type declaring ensign_value, or a slice of one" },
     .{ .name = "nonexhaustive_enum", .error_text = "is a non-exhaustive enum, whose values have no names to read; make it exhaustive, or use an aegis integer, Duration or Bytes" },
     .{ .name = "later_aegis_contract", .error_text = "is an aegis scalar of contract 2; this ensign reads contract 1" },
     .{ .name = "untyped_spec", .error_text = "must be declared `pub const spec: ensign.Spec(@This())`" },
     .{ .name = "global_hides_builtin", .error_text = "its -V flag hides the global option of global_hides_builtin.T" },
+    .{ .name = "custom_later_contract", .error_text = "custom_later_contract.Port.ensign_value is of contract 2; this ensign reads contract 1" },
+    .{ .name = "custom_parse_shape", .error_text = ", not E!custom_parse_shape.Port" },
+    .{ .name = "custom_without_format", .error_text = "custom_without_format.Port has no format method, which help and render write it with: pub fn format(self, w: *std.Io.Writer) std.Io.Writer.Error!void" },
+    .{ .name = "custom_unknown_refusal", .error_text = "custom_unknown_refusal.Port.ensign_value.refused names error.TooBig, which parse never returns" },
+    .{ .name = "custom_beside_aegis", .error_text = "custom_beside_aegis.Jobs.ensign_value: the type is also an aegis scalar, which ensign reads by aegis_scalar; declare one of them" },
 };
 
 /// ensign again, in the mode a benchmark builds in: an imported module keeps
