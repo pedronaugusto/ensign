@@ -9,6 +9,7 @@ const help = @import("help.zig");
 const completion = @import("complete.zig");
 const process = @import("process.zig");
 const rendering = @import("render.zig");
+const completer = @import("completer.zig");
 
 pub const Spec = spec.Spec;
 pub const Option = spec.Option;
@@ -36,6 +37,10 @@ pub const RenderError = rendering.RenderError;
 pub const Shell = completion.Shell;
 pub const CompletionError = completion.CompletionError;
 pub const writeCompletion = completion.writeCompletion;
+pub const Completion = completer.Completion;
+pub const Completer = completer.Completer;
+pub const CompletionRequest = completer.Request;
+pub const completionRequest = process.request;
 
 /// Parses `args`, the arguments after the program's name, into a `T`.
 /// Text values borrow from `args` and the environment; lists are allocated
@@ -63,4 +68,5 @@ test {
     _ = @import("lookup.zig");
     _ = @import("value.zig");
     _ = @import("kinds.zig");
+    _ = completer;
 }

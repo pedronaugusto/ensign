@@ -59,3 +59,27 @@ test "arguments that are not UTF-8 reach the value as std decodes them" {
         try std.testing.expectEqualStrings("\xff\xfe", outcome.parsed.name);
     }
 }
+
+fn echo(c: *ensign.Completion) ensign.Completion.Error!void {
+    for (c.args) |a| try c.add(a, "");
+    try c.add(c.prefix, "the word completed");
+}
+
+test "a completion script's request is the outcome when the environment asks" {
+    if (builtin.target.os.tag == .wasi or builtin.target.os.tag == .freestanding) return error.SkipZigTest;
+    const Asked = struct {
+        name: []const u8 = "",
+        pub const spec: ensign.Spec(@This()) = .{ .options = .{ .name = .{ .complete = echo } } };
+    };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var environ: std.process.Environ.Map = .init(std.testing.allocator);
+    defer environ.deinit();
+    try environ.put("ENSIGN_COMPLETE", "1::--name");
+    const outcome = try ensign.parseArgs(Asked, arena.allocator(), args("tool --name x", &.{}), .{ .environ = &environ });
+    var buffer: [128]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buffer);
+    var c = outcome.complete.completion(std.testing.io, arena.allocator(), &environ, &w);
+    try outcome.complete.answer(&c);
+    try std.testing.expectEqualStrings("--name\nx\tthe word completed\n", w.buffered());
+}

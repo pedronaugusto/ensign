@@ -64,6 +64,15 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\        switch -CaseSensitive (Get-EnsignKind $valueKey) {
         \\            'values' { foreach ($v in @(Get-EnsignValues $valueKey)) { Add-EnsignResult $v 'ParameterValue' '' } }
         \\            'command' { foreach ($c in @(Get-Command -CommandType Application -ErrorAction SilentlyContinue)) { Add-EnsignResult $c.Name 'Command' '' } }
+        \\            'program' {
+        \\                $rest = @($words | Select-Object -Skip 1)
+        \\                $env:ENSIGN_COMPLETE = "1:$valueKey"
+        \\                try { $lines = @(& $words[0] @rest $cur 2>$null) } finally { Remove-Item Env:\ENSIGN_COMPLETE -ErrorAction SilentlyContinue }
+        \\                foreach ($line in $lines) {
+        \\                    $parts = ([string]$line).Split([char]9, 2)
+        \\                    Add-EnsignResult $parts[0] 'ParameterValue' $(if ($parts.Count -gt 1) { $parts[1] } else { '' })
+        \\                }
+        \\            }
         \\            { $_ -ceq 'file' -or $_ -ceq 'directory' } {
         \\                $cut = $cur.LastIndexOfAny([char[]]@('/', '\'))
         \\                $dir = if ($cut -ge 0) { $cur.Substring(0, $cut + 1) } else { '' }

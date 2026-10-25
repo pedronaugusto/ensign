@@ -25,7 +25,7 @@ export fn ensignParse(arg: [*]const u8, arg_len: usize) i32 {
     const outcome = ensign.parse(Args, fixed.allocator(), &args, .{}) catch return -1;
     return switch (outcome) {
         .parsed => |v| v.level,
-        .help, .version => -2,
+        .help, .version, .complete => -2,
     };
 }
 

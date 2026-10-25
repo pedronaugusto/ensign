@@ -85,6 +85,18 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\    set -l state (__ensign_<id>_state)
         \\    __ensign_<id>_values "$state[3]:$state[2]"
         \\end
+        \\function __ensign_<id>_ask
+        \\    set -l tokens (commandline -opc)
+        \\    set -l cur (commandline -ct)
+        \\    if string match -q -- '--*=*' $cur
+        \\        set cur (string replace -r '^[^=]*=' '' -- $cur)
+        \\    end
+        \\    env ENSIGN_COMPLETE="1:$argv[1]" $tokens $cur 2>/dev/null
+        \\end
+        \\function __ensign_<id>_pending_ask
+        \\    set -l state (__ensign_<id>_state)
+        \\    __ensign_<id>_ask "$state[3]:$state[2]"
+        \\end
         \\
     , name);
     for (nodes) |node| try lines(node, w, name);
@@ -94,6 +106,7 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         .{ "file", "-F" },
         .{ "directory", "-f -a '(__fish_complete_directories)'" },
         .{ "command", "-f -a '(__fish_complete_command)'" },
+        .{ "program", "-f -a '(__ensign_<id>_pending_ask)'" },
         .{ "text", "-f" },
     };
     inline for (pending) |p| {
@@ -136,7 +149,7 @@ fn lines(node: Node, w: *Writer, name: []const u8) Writer.Error!void {
         for (e.offered) |spelling| {
             if (std.mem.startsWith(u8, spelling, "--")) try w.print(" -l {s}", .{spelling[2..]}) else try w.print(" -s {s}", .{spelling[1..]});
         }
-        try argument(w, e.kind, e.values);
+        try argument(w, e.kind, e.values, name, node.path, e.spellings[0]);
         try description(w, e.help);
         try w.writeByte('\n');
     }
@@ -157,9 +170,10 @@ fn lines(node: Node, w: *Writer, name: []const u8) Writer.Error!void {
         try w.print(" -n '__ensign_", .{});
         try tree.writeIdentifier(w, name);
         try w.print("_positional \"{s}\" {d} {s}'", .{ node.path, n, if (p.list) "list" else "one" });
+        var key: [24]u8 = undefined;
         switch (p.kind) {
             .file => try w.writeAll(" -F"),
-            else => try argument(w, p.kind, p.values),
+            else => try argument(w, p.kind, p.values, name, node.path, std.mem.print(&key, "#{d}", .{n}) catch unreachable), // unreachable: a usize in decimal fits 24 bytes
         }
         try w.writeByte('\n');
     }
@@ -173,8 +187,13 @@ fn start(w: *Writer, name: []const u8, path: []const u8) Writer.Error!void {
 
 /// What a value takes: `-x` requires one and offers no files, `-r -F`
 /// requires one and offers files.
-fn argument(w: *Writer, kind: tree.Kind, values: []const []const u8) Writer.Error!void {
+fn argument(w: *Writer, kind: tree.Kind, values: []const []const u8, name: []const u8, path: []const u8, spelling: []const u8) Writer.Error!void {
     switch (kind) {
+        .program => {
+            try w.writeAll(" -x -a '(__ensign_");
+            try tree.writeIdentifier(w, name);
+            try w.print("_ask \"{s}:{s}\")'", .{ path, spelling });
+        },
         .flag => {},
         .text => try w.writeAll(" -x"),
         .file => try w.writeAll(" -r -F"),

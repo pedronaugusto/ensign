@@ -18,15 +18,30 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\        file) _files ;;
         \\        directory) _files -/ ;;
         \\        command) _command_names -e ;;
+        \\        program) _ensign_<id>_ask "$1" ;;
         \\    esac
+        \\}
+        \\# Asks the program: the words before the one completed, unquoted.
+        \\_ensign_<id>_ask() {
+        \\    local line v d
+        \\    local -a ensign_values
+        \\    for line in "${(@f)$(ENSIGN_COMPLETE="1:$1" ${(Q)words[1]} "${(@Q)words[2,CURRENT-1]}" "$value" 2>/dev/null)}"; do
+        \\        [[ -z $line ]] && continue
+        \\        v="${line%%$'\t'*}"
+        \\        d=
+        \\        [[ $line == *$'\t'* ]] && d="${line#*$'\t'}"
+        \\        ensign_values+=("${v//:/\\:}${d:+:$d}")
+        \\    done
+        \\    _describe -t values value ensign_values
         \\}
         \\_ensign_<id>() {
         \\    emulate -L zsh
-        \\    local cur="${words[CURRENT]}" word ensign_path= pending= opt= REPLY
+        \\    local cur="${words[CURRENT]}" value="${words[CURRENT]}" word ensign_path= pending= opt= REPLY
         \\    local -a ensign_items
         \\    integer done=0 count=0 i=2 k
         \\    if [[ $cur == --*=* ]]; then
         \\        opt="${cur%%=*}"
+        \\        value="${cur#*=}"
         \\        compset -P '*='
         \\    fi
         \\    while (( i < CURRENT )); do

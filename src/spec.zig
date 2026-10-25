@@ -2,6 +2,7 @@
 //! field is called on the command line, its help, and the command's text.
 const std = @import("std");
 const text = @import("text.zig");
+const completer = @import("completer.zig");
 
 /// What a shell completes for an option's value or a positional.
 pub const Hint = enum {
@@ -45,6 +46,10 @@ pub const Option = struct {
     delimiter: ?u8 = null,
     /// What a shell completes for the value.
     hint: Hint = .none,
+    /// The program answers the completion of the value: the script asks it
+    /// with the words typed. Overrides `hint`, enum values and a completer
+    /// the value's type declares.
+    complete: ?completer.Completer = null,
     /// The heading this option is listed under in help; "Options" when null.
     section: ?[]const u8 = null,
     /// For the last positional, a list of text: from the first argument this

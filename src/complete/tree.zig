@@ -6,6 +6,7 @@ const text = @import("../text.zig");
 const value = @import("../value.zig");
 /// What a value is: only an enum offers values to complete.
 const kinds = @import("../kinds.zig");
+const completer = @import("../completer.zig");
 
 /// What a spelling or a positional takes.
 pub const Kind = enum {
@@ -18,6 +19,8 @@ pub const Kind = enum {
     file,
     directory,
     command,
+    /// The program answers: the script asks it.
+    program,
 };
 
 /// One option at one command, under every spelling.
@@ -31,6 +34,8 @@ pub const Entry = struct {
     values: []const []const u8 = &.{},
     help: []const u8,
     hidden: bool,
+    /// What answers when `kind` is `program`.
+    completer: ?completer.Completer = null,
 };
 
 pub const Sub = struct {
@@ -47,6 +52,8 @@ pub const Positional = struct {
     values: []const []const u8 = &.{},
     /// It takes every argument from its position on.
     list: bool,
+    /// What answers when `kind` is `program`.
+    completer: ?completer.Completer = null,
 };
 
 pub const Node = struct {
@@ -100,7 +107,7 @@ fn walk(comptime T: type, comptime path: []const u8, comptime inherited: []const
             walk(sub.Payload, child, globals);
     };
     var positionals: []const Positional = &.{};
-    for (i.positionals) |p| positionals = positionals ++ .{Positional{ .kind = kindOf(p), .values = valuesOf(p), .list = p.kind == .list }};
+    for (i.positionals) |p| positionals = positionals ++ .{Positional{ .kind = kindOf(p), .values = valuesOf(p), .list = p.kind == .list, .completer = completerOf(p) }};
     return .{Node{ .path = path, .entries = entries ++ inherited, .subs = subs, .positionals = positionals }} ++ below;
 }
 
@@ -123,11 +130,13 @@ fn entry(comptime o: model.Opt) Entry {
         .values = valuesOf(o),
         .help = firstLine(o.meta.help),
         .hidden = o.meta.hidden,
+        .completer = completerOf(o),
     };
 }
 
 fn kindOf(comptime o: model.Opt) Kind {
     if (!o.takesValue()) return .flag;
+    if (completerOf(o) != null) return .program;
     if (comptime kinds.of(o.Value) == .enumeration) return .values;
     return switch (o.meta.hint) {
         .none => .text,
@@ -138,8 +147,54 @@ fn kindOf(comptime o: model.Opt) Kind {
 }
 
 fn valuesOf(comptime o: model.Opt) []const []const u8 {
-    if (o.takesValue() and comptime kinds.of(o.Value) == .enumeration) return value.names(o.Value);
+    if (kindOf(o) == .values) return value.names(o.Value);
     return &.{};
+}
+
+/// The field's completer, else its type's.
+fn completerOf(comptime o: model.Opt) ?completer.Completer {
+    if (!o.takesValue()) return null;
+    if (o.meta.complete) |c| return c;
+    if (comptime kinds.of(o.Value) == .custom) return kinds.Custom(o.Value).complete;
+    return null;
+}
+
+/// A key a script may ask the program about, and what answers it.
+pub const Answer = struct {
+    /// `path:spelling`, or `path:#index` for a positional.
+    key: []const u8,
+    completer: completer.Completer,
+    /// For a list positional, the first index it takes: every `path:#n` from
+    /// it on is this one.
+    from: ?usize = null,
+};
+
+/// Every key of `T`'s tree the program answers.
+pub fn answers(comptime T: type) []const Answer {
+    @setEvalBranchQuota(text.branch_quota);
+    var out: []const Answer = &.{};
+    for (nodes(T)) |node| {
+        for (node.entries) |e| if (e.completer) |c| for (e.spellings) |spelling| {
+            out = out ++ .{Answer{ .key = node.path ++ ":" ++ spelling, .completer = c }};
+        };
+        for (node.positionals, 0..) |p, n| if (p.completer) |c| {
+            out = out ++ .{Answer{ .key = std.fmt.comptimePrint("{s}:#{d}", .{ node.path, n }), .completer = c, .from = if (p.list) n else null }};
+        };
+    }
+    return out;
+}
+
+/// What answers `key` among `list`, or null.
+pub fn answering(list: []const Answer, key: []const u8) ?completer.Completer {
+    for (list) |a| if (std.mem.eql(u8, a.key, key)) return a.completer;
+    // `path:#n` past a list positional's own index.
+    const hash = std.mem.findScalarLast(u8, key, '#') orelse return null;
+    if (hash == 0 or key[hash - 1] != ':') return null;
+    const n = std.fmt.parseInt(usize, key[hash + 1 ..], 10) catch return null;
+    for (list) |a| if (a.from) |from| {
+        if (n >= from and std.mem.eql(u8, a.key[0 .. std.mem.findScalarLast(u8, a.key, '#').? + 1], key[0 .. hash + 1])) return a.completer;
+    };
+    return null;
 }
 
 /// The first line of a help text.

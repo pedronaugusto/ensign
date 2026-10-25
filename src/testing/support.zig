@@ -10,7 +10,7 @@ pub fn parsed(comptime T: type, args: []const []const u8) !T {
 pub fn parsedWith(comptime T: type, args: []const []const u8, options: ensign.Options) !T {
     return switch (try ensign.parse(T, std.testing.allocator, args, options)) {
         .parsed => |v| v,
-        .help, .version => error.TestUnexpectedResult,
+        .help, .version, .complete => error.TestUnexpectedResult,
     };
 }
 

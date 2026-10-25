@@ -11,6 +11,7 @@
 //! declaration naming its own `parse`, and writes itself with std's `format`.
 const std = @import("std");
 const aegis = @import("aegis");
+const completer = @import("completer.zig");
 
 /// How a value is read and written.
 pub const Kind = enum {
@@ -118,6 +119,9 @@ pub fn Custom(comptime V: type) type {
         pub const Failure = if (shape == .errors) @typeInfo(R).error_union.error_set else error{Refused};
         /// Completes "expected ...".
         pub const expected: []const u8 = d.expected;
+        /// What answers the completion of a value of the type, when it declares
+        /// `.complete`.
+        pub const complete: ?completer.Completer = if (@hasField(@TypeOf(d), "complete")) d.complete else null;
 
         /// Each error `.refused` names is one `parse` returns.
         pub const checked = blk: {

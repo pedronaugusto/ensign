@@ -26,9 +26,29 @@ pub fn write(nodes: []const Node, w: *Writer, name: []const u8) Writer.Error!voi
         \\            COMPREPLY=($(compgen -P "$3" -d -- "$2"))
         \\            [ -z "$3" ] && type compopt >/dev/null 2>&1 && compopt -o filenames 2>/dev/null ;;
         \\        command) COMPREPLY=($(compgen -P "$3" -c -- "$2")) ;;
+        \\        program) _ensign_<id>_ask "$1" "$2" "$3" ;;
         \\        *) COMPREPLY=() ;;
         \\    esac
         \\    return 0
+        \\}
+        \\# Asks the program: the words before the one completed, `=` splits joined.
+        \\_ensign_<id>_ask() {
+        \\    local j=1 w line v
+        \\    local -a ensign_words
+        \\    while [ $j -lt $end ]; do
+        \\        w="${COMP_WORDS[j]}"
+        \\        j=$((j + 1))
+        \\        if [ $j -lt $end ] && [ "${COMP_WORDS[j]}" = "=" ]; then
+        \\            w="$w=${COMP_WORDS[j + 1]}"
+        \\            j=$((j + 2))
+        \\        fi
+        \\        ensign_words[${#ensign_words[@]}]="$w"
+        \\    done
+        \\    COMPREPLY=()
+        \\    while IFS= read -r line; do
+        \\        v="${line%%$'\t'*}"
+        \\        [[ "$v" == "$2"* ]] && COMPREPLY[${#COMPREPLY[@]}]="$3$v"
+        \\    done < <(ENSIGN_COMPLETE="1:$1" "${COMP_WORDS[0]}" "${ensign_words[@]}" "$2" 2>/dev/null)
         \\}
         \\_ensign_<id>() {
         \\    local cur="${COMP_WORDS[COMP_CWORD]}" end=$COMP_CWORD opt= prefix= word path= pending= done=0 count=0 i=1 k REPLY

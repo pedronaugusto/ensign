@@ -5,6 +5,8 @@ const parser = @import("parse.zig");
 const model = @import("model.zig");
 const help = @import("help.zig");
 const Diagnostic = @import("diagnostic.zig").Diagnostic;
+const completer = @import("completer.zig");
+const tree = @import("complete/tree.zig");
 const Allocator = std.mem.Allocator;
 
 /// What `parseArgs` can fail with: parsing, or decoding the arguments.
@@ -18,7 +20,9 @@ pub const max_width = 100;
 /// declaration's `name`, else the first argument's base name. On Windows
 /// the arguments are decoded as std decodes them, to WTF-8, into `arena`,
 /// and text values borrow them there; elsewhere they borrow the process's
-/// own. Lists are allocated with `arena` too.
+/// own. Lists are allocated with `arena` too. When the environment holds
+/// `ENSIGN_COMPLETE`, a completion script is asking: the arguments are the
+/// words typed, and the outcome is `.complete`.
 pub fn parseArgs(comptime T: type, arena: Allocator, args: std.process.Args, options: parser.Options) ArgsError!parser.Outcome(T) {
     // Never deinitialized: on Windows and WASI the values borrow the
     // iterator's buffer, which lives in `arena`.
@@ -27,7 +31,28 @@ pub fn parseArgs(comptime T: type, arena: Allocator, args: std.process.Args, opt
     if (it.next()) |first| {
         if (with.name == null and model.declared(T).name == null) with.name = programName(first);
     }
+    if (options.environ) |environ| if (environ.get(completer.variable)) |asked| {
+        var words: std.ArrayList([]const u8) = .empty;
+        while (it.next()) |arg| try words.append(arena, arg);
+        return .{ .complete = request(T, asked, words.items) };
+    };
     return parser.parseFrom(T, arena, &it, with);
+}
+
+/// The request in `asked`, `<protocol>:<key>`, with `words` the arguments
+/// after the program's name: the words before the cursor, then the one
+/// being completed.
+pub fn request(comptime T: type, asked: []const u8, words: []const []const u8) completer.Request {
+    const prefix = if (words.len == 0) "" else words[words.len - 1];
+    const before = if (words.len == 0) words else words[0 .. words.len - 1];
+    const colon = std.mem.findScalar(u8, asked, ':') orelse asked.len;
+    const version = std.fmt.parseInt(u32, asked[0..colon], 10) catch 0;
+    if (version != completer.protocol or colon == asked.len)
+        return .{ .key = "", .args = before, .prefix = prefix, .completer = null, .problem = "the completion script speaks another protocol than this program's 1; regenerate it" };
+    const key = asked[colon + 1 ..];
+    const answers = comptime tree.answers(T);
+    const found = tree.answering(answers, key);
+    return .{ .key = key, .args = before, .prefix = prefix, .completer = found, .problem = if (found == null) "nothing here completes by the program" else "" };
 }
 
 /// The base name of a program's path, without `.exe` on Windows.
@@ -40,7 +65,9 @@ pub fn programName(path: []const u8) []const u8 {
 }
 
 /// Parses the process's arguments, or answers for the program: `--help`
-/// and `--version` print to standard output and exit 0, and a mistake
+/// and `--version` print to standard output and exit 0, a completion
+/// script's request is answered there too (1 and a message on standard error
+/// when the completer fails), and a mistake
 /// prints its message and usage to standard error and exits 2. Help wraps
 /// to the terminal, at most `max_width` columns. Lists and decoded arguments
 /// live in the process's arena.
@@ -74,6 +101,18 @@ pub fn parseOrExit(comptime T: type, init: std.process.Init) T {
             var buffer: [256]u8 = undefined;
             var w = std.Io.File.stdout().writer(init.io, &buffer);
             v.write(&w.interface) catch std.process.exit(1);
+            w.interface.flush() catch std.process.exit(1);
+            std.process.exit(0);
+        },
+        .complete => |r| {
+            var buffer: [4096]u8 = undefined;
+            var w = std.Io.File.stdout().writer(init.io, &buffer);
+            var c = r.completion(init.io, init.arena.allocator(), init.environ_map, &w.interface);
+            r.answer(&c) catch |err| switch (err) {
+                error.WriteFailed => std.process.exit(1),
+                // The scripts discard standard error; a person running the line by hand reads it.
+                error.Failed => std.process.fatal("completion failed: {s}", .{c.failure}),
+            };
             w.interface.flush() catch std.process.exit(1);
             std.process.exit(0);
         },

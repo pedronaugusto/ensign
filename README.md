@@ -41,11 +41,17 @@ const Build = struct {
             .jobs = .{ .short = 'j', .env = "USAGE_JOBS", .help = "Parallel jobs; one per core when not given" },
             .timeout = .{ .help = "Give up on a step after this long, as 30s or 1m30s" },
             .max_size = .{ .help = "The largest output, as 4096, 64MiB or 1.5GB" },
-            .target = .{ .value_name = "TRIPLE", .help = "The target to build for" },
+            .target = .{ .value_name = "TRIPLE", .complete = targets, .help = "The target to build for" },
             .files = .{ .positional = true, .hint = .file, .help = "Files to build" },
         },
     };
 };
+
+/// The program answers what `--target` completes to: the shell asks it.
+fn targets(c: *ensign.Completion) ensign.Completion.Error!void {
+    const known = [_][2][]const u8{ .{ "aarch64-macos", "Apple silicon" }, .{ "x86_64-linux", "Linux on x86-64" }, .{ "x86_64-windows", "Windows on x86-64" } };
+    for (known) |t| if (std.mem.startsWith(u8, t[0], c.prefix)) try c.add(t[0], t[1]);
+}
 
 const Cli = struct {
     verbose: u8 = 0,

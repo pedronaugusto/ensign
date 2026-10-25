@@ -11,6 +11,7 @@ const value = @import("value.zig");
 const help = @import("help.zig");
 const lookup = @import("lookup.zig");
 const diagnostic = @import("diagnostic.zig");
+const completer = @import("completer.zig");
 const Allocator = std.mem.Allocator;
 const Writer = std.Io.Writer;
 const Diagnostic = diagnostic.Diagnostic;
@@ -82,6 +83,9 @@ pub fn Outcome(comptime T: type) type {
         parsed: T,
         help: Help,
         version: Version,
+        /// A completion script asked the program to complete a value
+        /// (`ENSIGN_COMPLETE` was set): only `parseArgs` returns it.
+        complete: completer.Request,
     };
 }
 

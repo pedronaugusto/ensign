@@ -37,6 +37,13 @@ pub fn required(shell: Shell) bool {
 /// there, and checks each case's candidates. Skips when the shell is not
 /// installed, unless it is required.
 pub fn check(comptime T: type, shell: Shell, name: []const u8, cases: []const Case) !void {
+    return checkWith(T, shell, name, cases, null);
+}
+
+/// As `check`, with `program` an sh script installed as the program `name`
+/// on the shell's search path, for the scripts that ask the program. Skips on
+/// Windows, where no sh runs it.
+pub fn checkWith(comptime T: type, shell: Shell, name: []const u8, cases: []const Case, program: ?[]const u8) !void {
     const gpa = std.testing.allocator;
     const io = std.testing.io;
     if (builtin.target.os.tag == .windows and shell != .powershell) return error.SkipZigTest;
@@ -45,6 +52,13 @@ pub fn check(comptime T: type, shell: Shell, name: []const u8, cases: []const Ca
     try tmp.dir.writeFile(io, .{ .sub_path = "alpha.txt", .data = "" });
     try tmp.dir.writeFile(io, .{ .sub_path = "beta.zig", .data = "" });
     try tmp.dir.createDir(io, "sub", .default_dir);
+    if (program) |source| {
+        if (builtin.target.os.tag == .windows) return error.SkipZigTest;
+        try tmp.dir.createDir(io, "bin", .default_dir);
+        var bin = try tmp.dir.openDir(io, "bin", .{});
+        defer bin.close(io);
+        try bin.writeFile(io, .{ .sub_path = name, .data = source, .flags = .{ .permissions = .executable_file } });
+    }
 
     var script: std.Io.Writer.Allocating = .init(gpa);
     defer script.deinit();
@@ -64,6 +78,11 @@ pub fn check(comptime T: type, shell: Shell, name: []const u8, cases: []const Ca
     for ([_][]const u8{ "BASH_ENV", "ENV", "PSModulePath" }) |key| _ = environ.swapRemove(key);
     try environ.put("LC_ALL", "C");
     try environ.put("TERM", "dumb");
+    if (program != null) {
+        const path = try gpa.print("{s}/bin:{s}", .{ home, environ.get("PATH") orelse "/usr/bin:/bin" });
+        defer gpa.free(path);
+        try environ.put("PATH", path);
+    }
 
     const argv: []const []const u8 = switch (shell) {
         .bash => &.{ "bash", "--norc", "--noprofile", "driver" },
@@ -112,7 +131,7 @@ fn writeDriver(w: *std.Io.Writer, shell: Shell, name: []const u8, cases: []const
         .zsh => {
             try w.print(
                 \\compdef() {{ : }}
-                \\_describe() {{ local item; for item in "${{(@P)4}}"; do item=${{item%%:*}}; [[ $item == ${{ensign_cur}}* ]] && ensign_out+=("$item"); done }}
+                \\_describe() {{ local item; for item in "${{(@P)4}}"; do item=${{item//\\:/$'\x01'}}; item=${{item%%:*}}; item=${{item//$'\x01'/:}}; [[ $item == ${{ensign_cur}}* ]] && ensign_out+=("$ensign_iprefix$item"); done }}
                 \\compadd() {{ [[ $1 == -- ]] && shift; local v; for v in "$@"; do [[ $v == ${{ensign_cur}}* ]] && ensign_out+=("$ensign_iprefix$v"); done }}
                 \\_files() {{ local f; for f in ${{ensign_cur}}*(N); do [[ $1 == -/ && ! -d $f ]] && continue; ensign_out+=("$f"); done }}
                 \\_command_names() {{ [[ -n $PATH ]] && ensign_out+=('<commands>') }}

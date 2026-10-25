@@ -244,6 +244,7 @@ fn arbitrary(_: void, c: *shake.Case) !void {
         .parsed => |v| ensign.free(Prop, std.testing.allocator, &v),
         .help => |h| try h.write(&w, 80),
         .version => return error.NoVersionDeclared,
+        .complete => return error.CompletionUnasked,
     } else |err| {
         if (err == error.OutOfMemory) return err;
         try diagnostic.write(&w, 80);
