@@ -10,6 +10,7 @@ const completion = @import("complete.zig");
 const process = @import("process.zig");
 const rendering = @import("render.zig");
 const completer = @import("completer.zig");
+const man = @import("man.zig");
 
 pub const Spec = spec.Spec;
 pub const Option = spec.Option;
@@ -41,6 +42,10 @@ pub const Completion = completer.Completion;
 pub const Completer = completer.Completer;
 pub const CompletionRequest = completer.Request;
 pub const completionRequest = process.request;
+pub const ManOptions = man.ManOptions;
+pub const ManError = man.ManError;
+pub const writeManPage = man.writeManPage;
+pub const commands = man.commands;
 
 /// Parses `args`, the arguments after the program's name, into a `T`.
 /// Text values borrow from `args` and the environment; lists are allocated
@@ -69,4 +74,5 @@ test {
     _ = @import("value.zig");
     _ = @import("kinds.zig");
     _ = completer;
+    _ = man;
 }

@@ -132,3 +132,26 @@ test "a declaration without relations does no relation work" {
     const T = struct { a: bool = false, b: ?[]const u8 = null };
     _ = try ensign.parse(T, failing.allocator(), &.{ "--a", "--b=x" }, .{});
 }
+
+fn arbitrary(_: void, c: *shake.Case) !void {
+    const pieces = [_][]const u8{ "--key=k", "--cert=c", "--ca=a", "--token=t", "--password=p", "--ci", "--no-ci", "--color=never", "--no-progress", "-q", "--jobs=3", "--key", "x" };
+    const args = try c.gpa.alloc([]const u8, shake.gen.intRange(c.source, usize, 0, 6));
+    for (args) |*a| a.* = shake.gen.oneOf(c.source, []const u8, &pieces);
+    var diagnostic: ensign.Diagnostic = .{};
+    if (ensign.parse(Serve, std.testing.allocator, args, .{ .diagnostic = &diagnostic })) |outcome| {
+        const v = outcome.parsed;
+        // What parsed holds every relation.
+        if (v.key != null) try std.testing.expect(v.cert != null and v.ca != null);
+        try std.testing.expect((v.token != null) != (v.password != null));
+        if (v.ci) try std.testing.expect(v.quiet);
+    } else |err| {
+        var line: [512]u8 = undefined;
+        var w: std.Io.Writer = .fixed(&line);
+        try diagnostic.writeMessage(&w);
+        try std.testing.expect(err != error.OutOfMemory);
+    }
+}
+
+test "arbitrary command lines parse to values that hold every relation, or are refused with a message" {
+    try shake.check(std.testing.allocator, {}, arbitrary, .{ .cases = 3000 });
+}

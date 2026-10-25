@@ -4,6 +4,7 @@
 const std = @import("std");
 const ensign = @import("../ensign.zig");
 const shells = @import("shells.zig");
+const shake = @import("shakedown");
 
 const Shade = enum { light, dark };
 
@@ -134,4 +135,24 @@ test "fish asks the program" {
 
 test "PowerShell asks the program" {
     try shells.checkWith(Dyn, .powershell, "dyn", &cases, program);
+}
+
+fn arbitraryRequest(_: void, c: *shake.Case) !void {
+    const pieces = [_][]const u8{ "1", "2", ":", "checkout", "--branch", "-b", "--ref", "#", "0", "5", "--remote", "--host", " ", "\xff" };
+    var asked: std.ArrayList(u8) = .empty;
+    for (0..shake.gen.intRange(c.source, usize, 0, 6)) |_| try asked.appendSlice(c.gpa, shake.gen.oneOf(c.source, []const u8, &pieces));
+    const words = try c.gpa.alloc([]const u8, shake.gen.intRange(c.source, usize, 0, 4));
+    for (words) |*w| w.* = try shake.gen.string(c.source, c.gpa, .{ .kind = .bytes, .max_len = 6 });
+    const r = ensign.completionRequest(Dyn, asked.items, words);
+    var buffer: [1024]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buffer);
+    var completion = r.completion(std.testing.io, c.gpa, null, &w);
+    r.answer(&completion) catch |err| {
+        try std.testing.expectEqual(error.Failed, err);
+        try std.testing.expect(completion.failure.len != 0);
+    };
+}
+
+test "any request is answered or refused with a reason" {
+    try shake.check(std.testing.allocator, {}, arbitraryRequest, .{ .cases = 3000 });
 }

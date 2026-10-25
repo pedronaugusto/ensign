@@ -160,7 +160,7 @@ fn pageRows(comptime chain: []const type) []const Row {
     return rows;
 }
 
-fn commandLine(comptime sub: model.Sub) []const u8 {
+pub fn commandLine(comptime sub: model.Sub) []const u8 {
     if (sub.meta.help.len != 0) return sub.meta.help;
     if (sub.Payload == void or sub.external) return "";
     const about = model.info(sub.Payload).specOf().about;
@@ -271,7 +271,7 @@ fn one(comptime V: type, comptime v: V) []const u8 {
 }
 
 /// The words after the command's name on its usage line.
-fn usageWords(comptime i: model.Info) []const []const u8 {
+pub fn usageWords(comptime i: model.Info) []const []const u8 {
     @setEvalBranchQuota(text.branch_quota);
     var words: []const []const u8 = &.{};
     var optional = model.builtins(i).len != 0;

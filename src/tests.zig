@@ -14,4 +14,5 @@ test {
     _ = @import("testing/custom_test.zig");
     _ = @import("testing/relations_test.zig");
     _ = @import("testing/dynamic_test.zig");
+    _ = @import("testing/man_test.zig");
 }
