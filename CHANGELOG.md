@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-25
+
 ### Breaking
 
 - `Outcome` has a fourth variant, `.complete`, a completion script's request, which `parseArgs` returns when `ENSIGN_COMPLETE` is set; an exhaustive switch names it. `Problem` has two more, `required_by` and `missing_one`.
