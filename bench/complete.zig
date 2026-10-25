@@ -1,7 +1,7 @@
-//! The program side of dynamic completion, timed from outside against clap's
-//! `CompleteEnv`: `git checkout --branch` completed by a completer, the
-//! process started, answering and exiting (bench/clap/README.md has the
-//! command). Run without `ENSIGN_COMPLETE`, it parses its arguments and exits.
+//! The program side of dynamic completion, timed from outside:
+//! `git checkout --branch` completed by a completer, the process started,
+//! answering and exiting. Run without `ENSIGN_COMPLETE`, it parses its
+//! arguments and exits.
 const std = @import("std");
 const ensign = @import("ensign");
 

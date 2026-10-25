@@ -11,8 +11,6 @@
 //!   and implies, beside the same declaration without them;
 //! - complete: a completion request answered by a completer;
 //! - man: the manual page of the small program's subcommand.
-//!
-//! bench/clap holds the same rows through clap, the rival.
 const std = @import("std");
 const ensign = @import("ensign");
 const shakedown = @import("shakedown");
