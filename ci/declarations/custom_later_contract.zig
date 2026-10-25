@@ -2,7 +2,7 @@
 //! its number.
 const std = @import("std");
 const ensign = @import("ensign");
-const Port = struct {
+pub const Port = struct {
     n: u16,
     pub const ensign_value = .{ .contract = 2, .expected = "a port", .parse = parse };
     fn parse(bytes: []const u8) ?Port {

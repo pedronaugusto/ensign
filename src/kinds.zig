@@ -104,10 +104,10 @@ pub fn custom(comptime V: type) bool {
 pub fn Custom(comptime V: type) type {
     const d = V.ensign_value;
     const where = "ensign: " ++ @typeName(V) ++ ".ensign_value.parse";
-    const F = @typeInfo(@TypeOf(d.parse));
-    if (F != .@"fn" or F.@"fn".param_types.len != 1 or F.@"fn".param_types[0] != []const u8)
+    const parse_info = @typeInfo(@TypeOf(d.parse));
+    if (parse_info != .@"fn" or parse_info.@"fn".param_types.len != 1 or parse_info.@"fn".param_types[0] != []const u8)
         @compileError(where ++ " takes the argument's bytes: fn ([]const u8) E!" ++ @typeName(V) ++ " or ?" ++ @typeName(V));
-    const R = F.@"fn".return_type orelse @compileError(where ++ " returns a type known at compile time");
+    const R = parse_info.@"fn".return_type orelse @compileError(where ++ " returns a type known at compile time");
     const shape: enum { errors, optional } = switch (@typeInfo(R)) {
         .error_union => |e| if (e.payload == V) .errors else @compileError(where ++ " returns " ++ @typeName(R) ++ ", not E!" ++ @typeName(V)),
         .optional => |o| if (o.child == V) .optional else @compileError(where ++ " returns " ++ @typeName(R) ++ ", not ?" ++ @typeName(V)),

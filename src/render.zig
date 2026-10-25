@@ -9,7 +9,8 @@ const Allocator = std.mem.Allocator;
 pub const RenderError = error{
     /// The value holds what no command line gives: a count below its
     /// default, a flag false that cannot be negated, a null or empty list
-    /// where the default is not, a list item holding its delimiter.
+    /// where the default is not, a list item holding its delimiter, or an
+    /// option a relation needs given that holds null, zero or nothing.
     Unrepresentable,
     OutOfMemory,
 };
@@ -17,8 +18,9 @@ pub const RenderError = error{
 /// The arguments, after the program's name, that parse to `v`: each option
 /// whose value is not its default as `--long=value`, flags as `--long` or
 /// `--no-long`, then the subcommand, or the positionals after `--` when
-/// one starts with `-`. Everything is allocated in `arena`; text is copied
-/// only when joined to an option's name.
+/// one starts with `-`. An option the declaration's relations need is
+/// written even at its default. Everything is allocated in `arena`; text is
+/// copied only when joined to an option's name.
 pub fn render(comptime T: type, arena: Allocator, v: T) RenderError![]const []const u8 {
     var out: std.ArrayList([]const u8) = .empty;
     try command(T, arena, &out, v);
@@ -27,7 +29,13 @@ pub fn render(comptime T: type, arena: Allocator, v: T) RenderError![]const []co
 
 fn command(comptime T: type, arena: Allocator, out: *std.ArrayList([]const u8), v: T) RenderError!void {
     const i = comptime model.info(T);
-    inline for (i.options) |o| try option(o, arena, out, @field(v, o.field));
+    var written: [i.options.len]bool = @splat(false);
+    inline for (i.options, 0..) |o, n| {
+        const before = out.items.len;
+        try option(o, arena, out, @field(v, o.field));
+        written[n] = out.items.len != before;
+    }
+    try relations(T, arena, out, v, &written);
     var dashed = false;
     inline for (i.positionals) |p| {
         const field = @field(v, p.field);
@@ -67,6 +75,90 @@ fn command(comptime T: type, arena: Allocator, out: *std.ArrayList([]const u8), 
                 }
             },
         }
+    }
+}
+
+/// Writes what the relations of `T` need for the arguments to parse back to
+/// `v`: an option a written one requires, the first of a required group none
+/// of whose options was written, and an option at a value other than the one
+/// a written option implies, each even at its default. Repeats until nothing
+/// more is needed, since what it writes may need more.
+fn relations(comptime T: type, arena: Allocator, out: *std.ArrayList([]const u8), v: T, written: []bool) RenderError!void {
+    const i = comptime model.info(T);
+    const s = comptime i.specOf();
+    if (s.requires.len == 0 and s.required_groups.len == 0 and s.implies.len == 0) return;
+    var changed = true;
+    while (changed) {
+        changed = false;
+        inline for (s.requires) |r| {
+            if (written[comptime at(i, @tagName(r.option))]) inline for (r.needs) |f| {
+                const n = comptime at(i, @tagName(f));
+                if (!written[n]) {
+                    try forced(i.options[n], arena, out, @field(v, i.options[n].field));
+                    written[n] = true;
+                    changed = true;
+                }
+            };
+        }
+        inline for (s.required_groups) |group| {
+            const any = blk: {
+                inline for (group) |f| if (written[comptime at(i, @tagName(f))]) break :blk true;
+                break :blk false;
+            };
+            if (!any) {
+                const n = comptime at(i, @tagName(group[0]));
+                try forced(i.options[n], arena, out, @field(v, i.options[n].field));
+                written[n] = true;
+                changed = true;
+            }
+        }
+        inline for (s.implies) |rule| {
+            if (written[comptime at(i, @tagName(rule.option))]) {
+                inline for (comptime @typeInfo(@TypeOf(rule.sets)).@"struct".field_names) |name| {
+                    if (comptime @field(rule.sets, name) != null) {
+                        const n = comptime at(i, name);
+                        const o = i.options[n];
+                        if (!written[n] and !equal(o.Field, @field(v, name), comptime @field(rule.sets, name).?)) {
+                            try forced(o, arena, out, @field(v, name));
+                            written[n] = true;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The position of `field` among the options of `i`.
+fn at(comptime i: model.Info, comptime field: []const u8) usize {
+    for (i.options, 0..) |o, n| {
+        if (std.mem.eql(u8, o.field, field)) return n;
+    }
+    unreachable; // unreachable: model.validate checked that relations name options
+}
+
+/// Writes `o`, which `option` left out as at its default: a flag as
+/// `--long=true` or `--long=false`.
+fn forced(comptime o: model.Opt, arena: Allocator, out: *std.ArrayList([]const u8), field: o.Field) RenderError!void {
+    switch (o.kind) {
+        .flag => {
+            const set: bool = if (o.optional) field orelse return error.Unrepresentable else field;
+            try out.append(arena, if (set) "--" ++ o.long ++ "=true" else "--" ++ o.long ++ "=false");
+        },
+        // A count not written is at its default, and any occurrence would move it.
+        .count => return error.Unrepresentable,
+        .single => {
+            const one = if (o.optional) field orelse return error.Unrepresentable else field;
+            try out.append(arena, try joined(o, arena, one));
+        },
+        .list => {
+            if (field.len == 0) return error.Unrepresentable;
+            for (field) |item| {
+                if (splits(o, item)) return error.Unrepresentable;
+                try out.append(arena, try joined(o, arena, item));
+            }
+        },
     }
 }
 

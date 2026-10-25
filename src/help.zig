@@ -142,11 +142,11 @@ fn pageRows(comptime chain: []const type) []const Row {
     };
     for (info.positionals) |p| {
         if (p.meta.hidden) continue;
-        rows = rows ++ .{Row{ .heading = "Arguments", .left = "  " ++ positional(p), .description = describe(p) }};
+        rows = rows ++ .{Row{ .heading = "Arguments", .left = "  " ++ positional(p), .description = describe(info, p) }};
     }
     for (info.options) |o| {
         if (o.meta.hidden) continue;
-        rows = rows ++ .{Row{ .heading = o.meta.section orelse "Options", .left = optionLeft(o), .description = describe(o) }};
+        rows = rows ++ .{Row{ .heading = o.meta.section orelse "Options", .left = optionLeft(o), .description = describe(info, o) }};
     }
     const s = info.specOf();
     if (s.help) |f| rows = rows ++ .{Row{ .heading = "Options", .left = flagLeft(f), .description = "Print help" }};
@@ -154,7 +154,7 @@ fn pageRows(comptime chain: []const type) []const Row {
     for (chain[0 .. chain.len - 1]) |Above| {
         for (model.info(Above).globals()) |g| {
             if (g.meta.hidden) continue;
-            rows = rows ++ .{Row{ .heading = "Global options", .left = optionLeft(g), .description = describe(g) }};
+            rows = rows ++ .{Row{ .heading = "Global options", .left = optionLeft(g), .description = describe(model.info(Above), g) }};
         }
     }
     return rows;
@@ -190,8 +190,8 @@ pub fn positional(comptime p: model.Opt) []const u8 {
 }
 
 /// An option's help with what else a reader needs: its default, its
-/// variable and its possible values.
-fn describe(comptime o: model.Opt) []const u8 {
+/// variable, its possible values, and the options it requires and implies.
+pub fn describe(comptime i: model.Info, comptime o: model.Opt) []const u8 {
     var out: []const u8 = o.meta.help;
     if (defaultText(o)) |d| out = out ++ (if (out.len == 0) "" else " ") ++ "[default:" ++ text.glue ++ d ++ "]";
     if (o.meta.env) |name| out = out ++ (if (out.len == 0) "" else " ") ++ "[env:" ++ text.glue ++ name ++ "]";
@@ -200,7 +200,43 @@ fn describe(comptime o: model.Opt) []const u8 {
         for (value.names(o.Value), 0..) |name, n| values = values ++ (if (n == 0) "" else ", ") ++ name;
         out = out ++ (if (out.len == 0) "" else " ") ++ "[possible" ++ text.glue ++ "values:" ++ text.glue ++ values ++ "]";
     }
+    for (i.specOf().requires) |r| {
+        if (!std.mem.eql(u8, @tagName(r.option), o.field)) continue;
+        var needs: []const u8 = "";
+        for (r.needs, 0..) |f, n| needs = needs ++ (if (n == 0) "" else "," ++ text.glue) ++ "--" ++ optionOf(i, @tagName(f)).long;
+        out = out ++ (if (out.len == 0) "" else " ") ++ "[requires:" ++ text.glue ++ needs ++ "]";
+    }
+    for (i.specOf().implies) |rule| {
+        if (!std.mem.eql(u8, @tagName(rule.option), o.field)) continue;
+        var sets: []const u8 = "";
+        for (@typeInfo(@TypeOf(rule.sets)).@"struct".field_names) |name| {
+            const v = @field(rule.sets, name) orelse continue;
+            sets = sets ++ (if (sets.len == 0) "" else "," ++ text.glue) ++ implied(optionOf(i, name), v);
+        }
+        out = out ++ (if (out.len == 0) "" else " ") ++ "[implies:" ++ text.glue ++ sets ++ "]";
+    }
     return out;
+}
+
+fn optionOf(comptime i: model.Info, comptime field: []const u8) model.Opt {
+    for (i.options) |o| {
+        if (std.mem.eql(u8, o.field, field)) return o;
+    }
+    unreachable; // unreachable: model.validate checked that relations name options
+}
+
+/// An implied value as the command line spells it: `--name`, `--no-name`,
+/// `--name=value`.
+fn implied(comptime o: model.Opt, comptime v: o.Field) []const u8 {
+    return switch (o.kind) {
+        .flag => blk: {
+            const set: bool = if (o.optional) v.? else v;
+            break :blk if (set) "--" ++ o.long else if (o.meta.negatable) "--no-" ++ o.long else "--" ++ o.long ++ "=false";
+        },
+        .count => std.fmt.comptimePrint("--{s}={d}", .{ o.long, v }),
+        .single => "--" ++ o.long ++ "=" ++ one(o.Value, if (o.optional) v.? else v),
+        .list => unreachable, // unreachable: model.validate refuses an implied list
+    };
 }
 
 /// A default worth showing: not false, zero, null or empty.
@@ -246,6 +282,11 @@ fn usageWords(comptime i: model.Info) []const []const u8 {
         } else optional = true;
     }
     if (optional) words = .{"[options]"} ++ words;
+    for (i.specOf().required_groups) |group| {
+        var word: []const u8 = "<";
+        for (group, 0..) |f, n| word = word ++ (if (n == 0) "" else "|") ++ "--" ++ optionOf(i, @tagName(f)).long;
+        words = words ++ .{word ++ ">"};
+    }
     if (i.commands) |c| words = words ++ .{if (c.optional) "[command]" else "<command>"};
     for (i.positionals) |p| words = words ++ .{positional(p)};
     return words;

@@ -10,7 +10,7 @@ const tree = @import("../complete/tree.zig");
 
 /// An IPv4 address and port, as `10.0.0.1:8080`: a struct that parses with
 /// an error union and names the words for one of its errors.
-const Address = struct {
+pub const Address = struct {
     octets: [4]u8,
     port: u16,
 
@@ -42,7 +42,7 @@ const Address = struct {
 
 /// A level written as a word or a number: an enum whose own reading replaces
 /// the tag names, with an optional `parse`.
-const Level = enum(u8) {
+pub const Level = enum(u8) {
     quiet = 0,
     normal = 1,
     loud = 2,
@@ -60,7 +60,7 @@ const Level = enum(u8) {
 };
 
 /// A tagged union: either a name, borrowed from the argument, or a number.
-const Target = union(enum) {
+pub const Target = union(enum) {
     name: []const u8,
     index: u32,
 

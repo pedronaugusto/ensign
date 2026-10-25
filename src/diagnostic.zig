@@ -32,6 +32,10 @@ pub const Problem = enum {
     missing_argument,
     missing_command,
     conflict,
+    /// An option given needs another that was not.
+    required_by,
+    /// None of a required group's options was given.
+    missing_one,
 };
 
 /// Filled by the parser when it returns an error other than
@@ -53,7 +57,8 @@ pub const Diagnostic = struct {
     expected: []const u8 = "",
     /// The closest known name to an unknown one.
     suggestion: ?[]const u8 = null,
-    /// The option the conflicting one was given with.
+    /// The option the conflicting one was given with, or the one that
+    /// needs a missing option.
     other: []const u8 = "",
     /// The variable a bad value came from, or one that could give a
     /// missing option.
@@ -87,6 +92,11 @@ pub const Diagnostic = struct {
             .missing_argument => try w.print("missing argument {s}", .{d.option}),
             .missing_command => try w.print("missing command: expected {s}", .{d.expected}),
             .conflict => try w.print("'{s}' cannot be used with '{s}'", .{ d.option, d.other }),
+            .required_by => {
+                try w.print("'{s}' needs '{s}'", .{ d.other, d.option });
+                if (d.env) |name| try w.print(" (or set {s})", .{name});
+            },
+            .missing_one => try w.print("missing one of {s}", .{d.expected}),
         }
         if (d.suggestion) |s| try w.print("; did you mean '{s}'?", .{s});
     }

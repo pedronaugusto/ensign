@@ -601,9 +601,11 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
                     if (environ.get(name)) |bytes| if (bytes.len != 0) try self.fromEnv(st, o, name, bytes);
                 };
             };
+            self.implied();
+            try self.relations(st);
             inline for (info.options) |o| {
                 if (o.required and !self.given.isSet(o.index))
-                    return st.fail(error.MissingOption, .{ .problem = .missing_option, .option = "--" ++ o.long ++ " <" ++ o.value_name ++ ">", .env = o.meta.env });
+                    return st.fail(error.MissingOption, .{ .problem = .missing_option, .option = comptime spelledWithValue(o), .env = o.meta.env });
             }
             inline for (info.positionals, 0..) |p, i| {
                 const has = if (p.kind == .list) self.owned.isSet(slot(p)) else self.positional > i;
@@ -655,6 +657,62 @@ fn Frame(comptime chain: []const type, comptime names: []const []const u8, compt
                     }
                 }
             }
+        }
+
+        /// Sets what the options given imply, where neither the command line
+        /// nor the environment gave the option implied. An implied option
+        /// counts as given, so it implies in turn.
+        fn implied(self: *Self) void {
+            if (s.implies.len == 0) return;
+            var changed = true;
+            while (changed) {
+                changed = false;
+                inline for (s.implies) |rule| {
+                    if (self.given.isSet(comptime indexOf(@tagName(rule.option)))) {
+                        inline for (comptime @typeInfo(@TypeOf(rule.sets)).@"struct".field_names) |name| {
+                            if (comptime @field(rule.sets, name) != null) {
+                                const at = comptime indexOf(name);
+                                if (!self.given.isSet(at)) {
+                                    @field(self.out, name) = comptime @field(rule.sets, name).?;
+                                    self.given.set(at);
+                                    changed = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// That each option given has what it requires, and each required
+        /// group one of its options.
+        fn relations(self: *Self, st: *State) Error!void {
+            inline for (s.requires) |r| {
+                const subject = info.options[comptime indexOf(@tagName(r.option))];
+                if (self.given.isSet(subject.index)) inline for (r.needs) |f| {
+                    const need = info.options[comptime indexOf(@tagName(f))];
+                    if (!self.given.isSet(need.index))
+                        return st.fail(error.MissingOption, .{ .problem = .required_by, .option = comptime spelledWithValue(need), .other = "--" ++ subject.long, .env = need.meta.env });
+                };
+            }
+            inline for (s.required_groups) |group| {
+                const any = blk: {
+                    inline for (group) |f| if (self.given.isSet(comptime indexOf(@tagName(f)))) break :blk true;
+                    break :blk false;
+                };
+                if (!any) return st.fail(error.MissingOption, .{ .problem = .missing_one, .expected = comptime groupList(group) });
+            }
+        }
+
+        /// `--name <VALUE>`, or `--name` for a flag or count.
+        fn spelledWithValue(comptime o: model.Opt) []const u8 {
+            return "--" ++ o.long ++ if (o.takesValue()) " <" ++ o.value_name ++ ">" else "";
+        }
+
+        fn groupList(comptime group: anytype) []const u8 {
+            var out: []const u8 = "";
+            for (group, 0..) |f, n| out = out ++ (if (n == 0) "" else ", ") ++ "'--" ++ info.options[indexOf(@tagName(f))].long ++ "'";
+            return out;
         }
 
         fn fromEnv(self: *Self, st: *State, comptime o: model.Opt, name: []const u8, bytes: []const u8) Error!void {

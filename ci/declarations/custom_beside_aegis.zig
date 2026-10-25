@@ -2,7 +2,7 @@
 //! one declaration owns how a type is read.
 const std = @import("std");
 const ensign = @import("ensign");
-const Jobs = enum(u16) {
+pub const Jobs = enum(u16) {
     pub const aegis_scalar = .{ .contract = 1, .kind = .ranged, .representation = u16, .minimum = 1, .maximum = 64 };
     pub const ensign_value = .{ .contract = 1, .expected = "jobs", .parse = parse };
     _,

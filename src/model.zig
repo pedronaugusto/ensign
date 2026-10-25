@@ -309,6 +309,34 @@ fn validate(comptime i: Info) void {
             if (!ok) @compileError("ensign: " ++ where ++ ": conflicts name options, and " ++ name ++ " is none");
         }
     }
+    for (s.requires) |r| {
+        const subject = optionNamed(i, r.option, "requires");
+        if (r.needs.len == 0) @compileError("ensign: " ++ where ++ ": --" ++ subject.long ++ " requires nothing; name what it needs");
+        for (r.needs) |f| {
+            const need = optionNamed(i, f, "requires");
+            if (std.mem.eql(u8, need.field, subject.field)) @compileError("ensign: " ++ where ++ ": --" ++ subject.long ++ " requires itself");
+        }
+    }
+    for (s.required_groups) |group| {
+        if (group.len < 2) @compileError("ensign: " ++ where ++ ": a required group names at least two options; make a lone option required instead");
+        for (group) |f| {
+            const o = optionNamed(i, f, "required groups");
+            if (o.required) @compileError("ensign: " ++ where ++ ": --" ++ o.long ++ " is required already, so its group always holds one");
+        }
+    }
+    for (s.implies) |rule| {
+        const subject = optionNamed(i, rule.option, "implies");
+        var any = false;
+        for (@typeInfo(@TypeOf(rule.sets)).@"struct".field_names) |name| {
+            if (@field(rule.sets, name) == null) continue;
+            any = true;
+            const o = optionNamed(i, @field(spec.Field(i.T), name), "implies");
+            if (o.kind == .list) @compileError("ensign: " ++ where ++ ": --" ++ subject.long ++ " implies a value of --" ++ o.long ++ ", a list; an implied value is one value");
+            if (std.mem.eql(u8, o.field, subject.field)) @compileError("ensign: " ++ where ++ ": --" ++ subject.long ++ " implies a value of itself");
+            if (o.optional and @field(rule.sets, name).? == null) @compileError("ensign: " ++ where ++ ": --" ++ subject.long ++ " implies null for --" ++ o.long ++ ", which no command line gives; imply a value");
+        }
+        if (!any) @compileError("ensign: " ++ where ++ ": --" ++ subject.long ++ " implies nothing; give .sets a value");
+    }
     if (i.commands) |c| {
         var names: []const []const u8 = &.{};
         for (c.list) |sub| if (!sub.external) for (.{sub.name} ++ sub.aliases) |name| {
@@ -316,6 +344,16 @@ fn validate(comptime i: Info) void {
             names = names ++ .{name};
         };
     }
+}
+
+/// The option a relation names, which must be one: not a positional or the
+/// subcommand field.
+fn optionNamed(comptime i: Info, comptime f: anytype, comptime relation: []const u8) Opt {
+    const name = @tagName(f);
+    for (i.options) |o| {
+        if (std.mem.eql(u8, o.field, name)) return o;
+    }
+    @compileError("ensign: " ++ @typeName(i.T) ++ ": " ++ relation ++ " name options, and " ++ name ++ " is none");
 }
 
 /// The flags the parser answers for this command.

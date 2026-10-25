@@ -120,6 +120,17 @@ pub fn Spec(comptime T: type) type {
         /// A value from the environment is dropped when the command line
         /// gives another option of its group.
         conflicts: []const []const Field(T) = &.{},
+        /// Options that need others: when `option` is given, by the command
+        /// line or the environment, each of `needs` must be given too.
+        requires: []const Requires(T) = &.{},
+        /// Groups of options of which the command line or the environment
+        /// must give at least one. A group also in `conflicts` takes exactly one.
+        required_groups: []const []const Field(T) = &.{},
+        /// Values an option sets when it is given: each field of `sets` that
+        /// is not null, unless the command line or the environment gives that
+        /// field itself. The command line wins over the environment, the
+        /// environment over an implied value, and that over the default.
+        implies: []const Implies(T) = &.{},
         examples: []const Example = &.{},
         sections: []const Section = &.{},
         /// The help flag; null leaves `--help` to the program.
@@ -132,6 +143,47 @@ pub fn Spec(comptime T: type) type {
 /// The fields of `T` a spec may name.
 pub fn Field(comptime T: type) type {
     return std.meta.FieldEnum(T);
+}
+
+/// An option of `T` that needs others.
+pub fn Requires(comptime T: type) type {
+    return struct {
+        option: Field(T),
+        /// Each must be given whenever `option` is.
+        needs: []const Field(T),
+    };
+}
+
+/// The values an option of `T` sets when it is given.
+pub fn Implies(comptime T: type) type {
+    return struct {
+        option: Field(T),
+        /// A value for any option; null leaves it alone.
+        sets: Partial(T) = .{},
+    };
+}
+
+/// A struct with an optional value for each field of `T` but its subcommand
+/// field, each null by default.
+pub fn Partial(comptime T: type) type {
+    @setEvalBranchQuota(text.branch_quota);
+    const fields = @typeInfo(T).@"struct";
+    var names: [fields.field_names.len][:0]const u8 = undefined;
+    var types: [fields.field_names.len]type = undefined;
+    var attrs: [fields.field_names.len]std.lang.Type.Struct.FieldAttributes = undefined;
+    var len: usize = 0;
+    for (fields.field_names, fields.field_types) |name, F| {
+        if (isCommands(F)) continue;
+        const none: ?F = null;
+        names[len] = name;
+        types[len] = ?F;
+        attrs[len] = .{ .default_value_ptr = &none };
+        len += 1;
+    }
+    const final_names = names[0..len].*;
+    const final_types = types[0..len].*;
+    const final_attrs = attrs[0..len].*;
+    return @Struct(.auto, null, &final_names, &final_types, &final_attrs);
 }
 
 /// A struct with an `Option` for each field of `T` but its subcommand field.
