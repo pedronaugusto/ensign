@@ -36,6 +36,20 @@
       "imports": [
         "ensign"
       ]
+    },
+    "zig build docs -- completer": {
+      "source": "examples/usage.zig",
+      "region": "completer",
+      "imports": [
+        "ensign"
+      ]
+    },
+    "zig build docs -- man": {
+      "source": "examples/usage.zig",
+      "region": "man",
+      "imports": [
+        "ensign"
+      ]
     }
   },
   "extra_checks": [

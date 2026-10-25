@@ -47,11 +47,13 @@ const Build = struct {
     };
 };
 
+// --- README:completer ---
 /// The program answers what `--target` completes to: the shell asks it.
 fn targets(c: *ensign.Completion) ensign.Completion.Error!void {
     const known = [_][2][]const u8{ .{ "aarch64-macos", "Apple silicon" }, .{ "x86_64-linux", "Linux on x86-64" }, .{ "x86_64-windows", "Windows on x86-64" } };
     for (known) |t| if (std.mem.startsWith(u8, t[0], c.prefix)) try c.add(t[0], t[1]);
 }
+// --- README:completer ---
 
 const Cli = struct {
     verbose: u8 = 0,
@@ -63,6 +65,13 @@ const Cli = struct {
             pub const spec: ensign.Spec(@This()) = .{
                 .about = "Print a shell completion script",
                 .options = .{ .shell = .{ .positional = true } },
+            };
+        },
+        man: struct {
+            command: []const []const u8 = &.{},
+            pub const spec: ensign.Spec(@This()) = .{
+                .about = "Print the manual page of a command",
+                .options = .{ .command = .{ .positional = true } },
             };
         },
     },
@@ -96,6 +105,7 @@ switch (cli.command) {
         cli.verbose, cli.color, if (b.jobs) |jobs| jobs.raw() else 0, b.timeout, b.target orelse "native", b.files.len,
     }),
     .completions => |c| try ensign.writeCompletion(Cli, c.shell, out, "usage"),
+    .man => |m| try manual(out, m.command),
 }
 ```
 <!-- END GENERATED -->
@@ -148,6 +158,7 @@ Each field's type says how it is read:
 | `[]const T` | every occurrence, in order; `delimiter` also splits one argument into several values |
 | a tagged union, or an optional one | its subcommands, each a struct or `void` |
 | `ensign.External`, as one subcommand's type | any name no other subcommand has, with every argument after it as given: commands found at run time, as git's and cargo's |
+| a type declaring `ensign_value` | read by the type's own `parse`, and written back by its `format`: an address, a duration of your own, a struct, enum or tagged union |
 
 An aegis value is recognized by the parameters its type publishes, never by
 its name, and help shows its default as the command line spells it
@@ -156,6 +167,33 @@ integer from 1 to 256`, `a duration such as 30s or 1m30s`, `a duration in
 whole milliseconds` for `1.5ms`, or the range a duration or size must be in.
 Other non-exhaustive enums are refused at compile time, as are aegis's
 `Instant`, `Bits` and `Counter`, which have no command-line text.
+
+A type reads itself by declaring what it is, as aegis's scalars do, with
+nothing imported, so a library's type serves ensign without depending on it:
+
+```zig
+pub const Address = struct {
+    octets: [4]u8,
+    port: u16,
+
+    pub const ensign_value = .{
+        .contract = 1,
+        .expected = "an address such as 10.0.0.1:8080",
+        .parse = parse, // fn ([]const u8) E!Address, or ?Address
+        .refused = .{ .PortRange = "a port from 1 to 65535" },
+    };
+    pub fn parse(bytes: []const u8) error{ Malformed, PortRange }!Address { ... }
+    pub fn format(a: Address, w: *std.Io.Writer) std.Io.Writer.Error!void { ... }
+};
+```
+
+`.expected` completes "expected ..." in a mistake's message, and `.refused`
+names the words for each error `parse` returns. A value may borrow the
+argument, as text does, and nothing is allocated for it. Help shows its default
+and `render` writes it with `format`. A tagged union that declares
+`ensign_value` is one value, not subcommands. A declaration of another shape,
+a later contract, a missing `format`, words for an error `parse` never returns
+or `aegis_scalar` beside it does not compile.
 
 A field with a default may be left out; one without a default that is not
 optional is required, by the command line or the environment. A `[]const u8`
@@ -183,6 +221,19 @@ it: the command line wins over the environment, and the environment over the
 default. An empty variable counts as unset. Options in a `conflicts` group may
 not be given together on the command line, and a value from the environment is
 dropped when the command line gives another of its group.
+
+Three more relations are declared beside `conflicts`. `requires` says an
+option needs others: with `.requires = &.{.{ .option = .key, .needs =
+&.{.cert} }}`, `--key` without `--cert` is refused with `'--key' needs '--cert
+<CERT>'`. A `required_groups` entry needs at least one of its options (and,
+also in `conflicts`, exactly one). `implies` sets values when an option is
+given: `.{ .option = .ci, .sets = .{ .color = .never, .progress = false } }`.
+Given means the command line or the environment, and an implied option implies
+in turn. The command line wins over the environment, the environment over an
+implied value, and that over the default. Help shows `[requires: --cert]` and
+`[implies: --color=never, --no-progress]` beside the option, and a required
+group on the usage line as `<--token|--password>`; `render` writes what a
+relation needs even at its default.
 
 A declaration that cannot be parsed unambiguously does not compile: two
 options with one name, a list positional before another, positionals beside
@@ -215,6 +266,50 @@ that command's options, subcommands, enum values, or files, directories or
 programs where the declaration hints at them; an aegis value is free text. The bash script runs on bash 3.2
 and later.
 
+Where only the program knows the values (branches, hosts, targets), a field
+names a completer, `.complete = targets`, or its type declares one in
+`ensign_value.complete`:
+
+<!-- BEGIN GENERATED zig build docs -- completer -->
+```zig
+const ensign = @import("ensign");
+
+/// The program answers what `--target` completes to: the shell asks it.
+fn targets(c: *ensign.Completion) ensign.Completion.Error!void {
+    const known = [_][2][]const u8{ .{ "aarch64-macos", "Apple silicon" }, .{ "x86_64-linux", "Linux on x86-64" }, .{ "x86_64-windows", "Windows on x86-64" } };
+    for (known) |t| if (std.mem.startsWith(u8, t[0], c.prefix)) try c.add(t[0], t[1]);
+}
+```
+<!-- END GENERATED -->
+
+The script then runs the command as typed with `ENSIGN_COMPLETE=1:<key>` and
+the words before the cursor, then the word being completed, as its arguments;
+`parseOrExit` answers with one candidate a line, a tab before its description,
+and exits (`parseArgs` returns the request as `.complete`). Options,
+subcommands and enum values never start the program. A completer that cannot
+answer says why with `fail`: the program exits 1 with the message on standard
+error, which the scripts discard and a person running the line by hand reads.
+The `1` is the protocol's version, so a script and a program of different
+protocols refuse each other.
+
+`writeManPage` writes a command's manual page in roff with the man(7) macros,
+which mandoc and groff both read: NAME, SYNOPSIS, DESCRIPTION, its commands,
+arguments and options by help's sections, the global options above it,
+ENVIRONMENT for every variable an option reads, EXAMPLES, the declaration's own
+sections, VERSION and SEE ALSO. `commands(T)` lists every command's path, so a
+program writes them all as `prog.1`, `prog-build.1`:
+
+<!-- BEGIN GENERATED zig build docs -- man -->
+```zig
+const ensign = @import("ensign");
+
+/// The page of the command `path` names (`usage man build`), for `man -l -`.
+fn manual(out: *std.Io.Writer, path: []const []const u8) !void {
+    try ensign.writeManPage(Cli, out, .{ .date = "2026-10-25", .manual = "User Commands", .command = path });
+}
+```
+<!-- END GENERATED -->
+
 Arguments are bytes. On Windows `std.process.Args` decodes the command line from
 WTF-16 to WTF-8, as std does everywhere, and an unpaired surrogate reaches a
 text value as its WTF-8 bytes. Messages write bytes that are not printable
@@ -224,20 +319,24 @@ UTF-8 as `\xNN`.
 
 | Call | Does |
 |---|---|
-| `Spec(T)` | The declaration type: `name`, `version`, `about`, `description`, `options`, `commands`, `conflicts`, `examples`, `sections`, and the `help` and `version_flag` flags, null to leave them to the program |
-| `Option` | A field's `help`, `short`, `long`, `aliases`, `value_name`, `env`, `positional`, `count`, `global`, `hidden`, `negatable`, `delimiter`, `hint`, `section` and `raw` |
+| `Spec(T)` | The declaration type: `name`, `version`, `about`, `description`, `options`, `commands`, `conflicts`, `requires`, `required_groups`, `implies`, `examples`, `sections`, and the `help` and `version_flag` flags, null to leave them to the program |
+| `Option` | A field's `help`, `short`, `long`, `aliases`, `value_name`, `env`, `positional`, `count`, `global`, `hidden`, `negatable`, `delimiter`, `hint`, `complete`, `section` and `raw` |
 | `Command` | A subcommand's `help`, `name`, `aliases` and `hidden` |
 | `External` | The payload of a subcommand that takes any other name: the `name` given and its `args` |
 | `parseOrExit(T, init)` | Parses the process's arguments; answers help, the version and mistakes, and exits |
 | `parseArgs(T, arena, args, options)` | Parses a `std.process.Args`; decoded arguments and lists live in `arena` |
 | `parse(T, gpa, args, options)` | Parses a slice of arguments after the program's name; lists are allocated with `gpa` |
 | `Options` | The program's `name` for messages, the `environ` map, and the `diagnostic` to fill |
-| `Outcome(T)` | `.parsed`, or `.help` and `.version`, which `write` themselves |
-| `Error` | `UnknownOption`, `UnknownCommand`, `UnexpectedArgument`, `MissingValue`, `UnexpectedValue`, `InvalidValue`, `MissingOption`, `MissingArgument`, `MissingCommand`, `Conflict`, `OutOfMemory` |
+| `Outcome(T)` | `.parsed`, or `.help` and `.version`, which `write` themselves, or `.complete`, a completion script's request |
+| `Error` | `UnknownOption`, `UnknownCommand`, `UnexpectedArgument`, `MissingValue`, `UnexpectedValue`, `InvalidValue`, `MissingOption` (a required option, one a given option requires, or none of a required group), `MissingArgument`, `MissingCommand`, `Conflict`, `OutOfMemory` |
 | `Diagnostic` | What went wrong: `writeMessage` writes one line, `write` adds the usage and where help is |
 | `free(T, gpa, value)` | Releases the lists `parse` allocated |
 | `writeHelp(T, writer, program, width)` | Writes the root command's help |
 | `writeCompletion(T, shell, writer, program)` | Writes the bash, zsh, fish or PowerShell script |
+| `Completion`, `Completer` | What a completer is given (`prefix`, `args`, `io`, `gpa`, `environ`) and offers with `add(value, description)`, or refuses with `fail(message)` |
+| `CompletionRequest`, `completionRequest(T, asked, words)` | A script's request and its `answer`; `parseArgs` makes it from `ENSIGN_COMPLETE` |
+| `writeManPage(T, writer, options)` | Writes the manual page of the command at `options.command`, with its `section`, `date`, `source` and `manual` |
+| `commands(T)` | Every command's path of subcommand names, the root first |
 | `render(T, arena, value)` | The arguments that parse back to `value`, to start a child process with |
 | `terminalWidth(io, file, environ)` | The columns of the terminal a file writes to, or null |
 
@@ -245,11 +344,9 @@ UTF-8 as `\xNN`.
 
 - No abbreviated long options: `--verb` is not `--verbose`, and is answered
   with a suggestion.
-- No custom value types yet: a field is one of the types above.
-- No options that require or imply one another; `conflicts` is the one
-  relation between options.
 - No reading of configuration files; the environment is the one fallback.
-- Completion scripts are static: they hold the tree, and never call the program.
+- No files written: `writeManPage` and `writeCompletion` write text, and the
+  program decides where it goes.
 
 ## Platforms
 
@@ -281,13 +378,23 @@ value of a range and the sizes at either end of a representation, refusing
 one past them; check that a name one edit from an option is answered with a real
 one; and wrap help at every width. Parsing a value without lists is held to no
 allocation, a value's lists to exactly what it keeps, and every allocation
-failure is survived without a leak. `bay check-declarations` compiles each
-rejected declaration and checks the error it gives.
+failure is survived without a leak. Types that read themselves are read in
+every spelling, round trip through `render`, and take arbitrary bytes or
+refuse them with their own words, allocating nothing. Arbitrary command lines
+against a declaration with every relation parse to values that hold each
+relation or are refused with a message, and `render` writes what the
+relations need. Any completion request is answered or refused with a reason.
+Manual pages are checked word for word, rendered by mandoc and held clean under
+its lint at every level (`-W all`), where mandoc is installed. `bay
+check-declarations` compiles each rejected declaration and checks the error it
+gives.
 
 The completion scripts run in the real shells, against the same cases: bash
 on Linux in CI, where its absence fails the run, and zsh, fish and PowerShell
 wherever they are installed; a shell that is missing elsewhere is skipped. Each
-runs with a scratch home and no profile or rc file.
+runs with a scratch home and no profile or rc file. The scripts that ask the
+program run against a stand-in on the search path, which answers with the key
+and the words it was given.
 
 `bay bench` times parsing in ReleaseFast: 32 options of a 256-option command,
 eight subcommands deep, a thousand list values, an unknown option among 256,

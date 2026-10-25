@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking
+
+- `Outcome` has a fourth variant, `.complete`, a completion script's request, which `parseArgs` returns when `ENSIGN_COMPLETE` is set; an exhaustive switch names it. `Problem` has two more, `required_by` and `missing_one`.
+
+### Added
+
+- A type reads itself: an `ensign_value` declaration (contract 1) names the type's own `parse`, what a value must be, and the words for each error `parse` returns; `format` writes it back for help and `render`. Any struct, enum or tagged union, from any package, with nothing imported. A declaration of another shape, a later contract, a missing `format`, words for an error `parse` never returns or `aegis_scalar` beside it does not compile.
+- Relations between options: `requires` (an option needs others), `required_groups` (at least one of a group) and `implies` (values an option sets, below the command line and the environment), checked after the environment, shown in help and on the usage line, and written by `render`.
+- Dynamic completion: `Option.complete`, or `ensign_value.complete` on a type, names a completer the program runs; the bash, zsh, fish and PowerShell scripts ask the program with `ENSIGN_COMPLETE=1:<key>` and the words typed, and `parseOrExit` answers. `Completion`, `Completer`, `CompletionRequest` and `completionRequest` for programs that answer themselves.
+- Manual pages: `writeManPage` writes roff with the man(7) macros for any command of the declaration, clean under mandoc's lint; `commands` lists every command's path.
+
 ### Fixed
 
 - An aegis integer, Duration or Bytes from a program pinning another aegis version than ensign's was refused, a `Ranged` as "a non-exhaustive enum, whose values have no names to read" (bay's `--jobs` under a plain `zig build`): ensign recognized aegis's scalars by rebuilding them with its own copy of aegis, and two versions are two copies whose types are never equal. It now reads the `aegis_scalar` declaration each one carries (aegis 0.1.18), the same in every copy, at contract 1: its bounds and unit come from it, a value is made only through the type's own checked functions, and a later contract does not compile, named by its number.

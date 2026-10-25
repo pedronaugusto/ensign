@@ -26,11 +26,13 @@ const Build = struct {
     };
 };
 
+// --- README:completer ---
 /// The program answers what `--target` completes to: the shell asks it.
 fn targets(c: *ensign.Completion) ensign.Completion.Error!void {
     const known = [_][2][]const u8{ .{ "aarch64-macos", "Apple silicon" }, .{ "x86_64-linux", "Linux on x86-64" }, .{ "x86_64-windows", "Windows on x86-64" } };
     for (known) |t| if (std.mem.startsWith(u8, t[0], c.prefix)) try c.add(t[0], t[1]);
 }
+// --- README:completer ---
 
 const Cli = struct {
     verbose: u8 = 0,
@@ -42,6 +44,13 @@ const Cli = struct {
             pub const spec: ensign.Spec(@This()) = .{
                 .about = "Print a shell completion script",
                 .options = .{ .shell = .{ .positional = true } },
+            };
+        },
+        man: struct {
+            command: []const []const u8 = &.{},
+            pub const spec: ensign.Spec(@This()) = .{
+                .about = "Print the manual page of a command",
+                .options = .{ .command = .{ .positional = true } },
             };
         },
     },
@@ -72,11 +81,19 @@ pub fn main(init: std.process.Init) !void {
             cli.verbose, cli.color, if (b.jobs) |jobs| jobs.raw() else 0, b.timeout, b.target orelse "native", b.files.len,
         }),
         .completions => |c| try ensign.writeCompletion(Cli, c.shell, out, "usage"),
+        .man => |m| try manual(out, m.command),
     }
     // --- README:main ---
     try out.flush();
     try handled(init.gpa);
 }
+
+// --- README:man ---
+/// The page of the command `path` names (`usage man build`), for `man -l -`.
+fn manual(out: *std.Io.Writer, path: []const []const u8) !void {
+    try ensign.writeManPage(Cli, out, .{ .date = "2026-10-25", .manual = "User Commands", .command = path });
+}
+// --- README:man ---
 
 /// The same parse with the program in charge of mistakes.
 fn handled(gpa: std.mem.Allocator) !void {
