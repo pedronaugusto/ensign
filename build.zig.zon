@@ -6,8 +6,8 @@
     .paths = .{ "build.zig", "build.zig.zon", "src", "README.md", "CHANGELOG.md", "LICENSE" },
     .dependencies = .{
         .xenoglyph = .{
-            .url = "git+https://github.com/pedronaugusto/xenoglyph?ref=aegis-0.2#dee00fe6326b05901e9fe8e9518066a2804db6a6",
-            .hash = "xenoglyph-0.5.0-YKXZlajfRgBy3VGIBZ89sjufPkkW14rgWfQYFVF5asMe",
+            .url = "git+https://github.com/pedronaugusto/xenoglyph?ref=v0.5.1#47cce65a205158f3a9d64a78be763ee5cee744cc",
+            .hash = "xenoglyph-0.5.1-YKXZlRfgRgA-8yyLTWXsJNDfnimXJi_WG7n959GPPr4U",
         },
 
         .aegis = .{
