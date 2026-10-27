@@ -65,7 +65,7 @@ const Small = struct {
 };
 
 /// An IPv4 address and port, read by its own type.
-const Address = struct {
+pub const Address = struct {
     octets: [4]u8,
     port: u16,
 
