@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Pins aegis breaking-0.3 (a34e694), the 0.3.0 line the family is on, where it pinned aegis 0.2.1, and on it xenoglyph main (d643260), where it pinned 0.5.1; shakedown main (4979fa9) for the tests. ensign builds on them unchanged.
+
 ## [0.3.1] - 2026-10-27
 
 ### Changed
