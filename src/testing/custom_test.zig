@@ -50,6 +50,7 @@ pub const Level = enum(u8) {
     pub const ensign_value = .{ .contract = 1, .expected = "a level: quiet, normal, loud or 0 to 2", .parse = parse };
 
     pub fn parse(bytes: []const u8) ?Level {
+        // glint-ignore: Z026 -- a level that is no number is read as its name below
         if (std.fmt.parseInt(u8, bytes, 10)) |n| return std.enums.fromInt(Level, n) else |_| {}
         return std.meta.stringToEnum(Level, bytes);
     }
@@ -68,6 +69,7 @@ pub const Target = union(enum) {
 
     pub fn parse(bytes: []const u8) error{Empty}!Target {
         if (bytes.len == 0) return error.Empty;
+        // glint-ignore: Z026 -- a target that is no number after its # is read as a name below
         if (bytes[0] == '#') if (std.fmt.parseInt(u32, bytes[1..], 10)) |n| return .{ .index = n } else |_| {};
         return .{ .name = bytes };
     }

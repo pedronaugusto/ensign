@@ -124,6 +124,7 @@ pub fn parseOrExit(comptime T: type, init: std.process.Init) T {
 /// is no terminal.
 pub fn terminalWidth(io: std.Io, file: std.Io.File, environ: ?*const std.process.Environ.Map) ?u16 {
     if (environ) |map| if (map.get("COLUMNS")) |columns| {
+        // glint-ignore: Z026 -- a COLUMNS that is no width is not taken: the terminal is asked below
         if (std.fmt.parseInt(u16, columns, 10)) |n| {
             if (n > 0) return n;
         } else |_| {}
