@@ -4,16 +4,20 @@ ensign parses command lines in Zig. A program declares its arguments as a
 struct, and the parser, the help pages and the shell completions are generated
 from that declaration at compile time, with no registration at run time.
 
-Work in progress toward the public cut.
-
 ## Install
 
-Requires Zig 0.17.0. Fetch with `zig fetch --save
+Requires Zig 0.17. Fetch with `zig fetch --save
 git+https://github.com/pedronaugusto/ensign`, then obtain the `ensign` module
 through `b.dependency` and add it to your executable's imports. ensign depends
 on [xenoglyph](https://github.com/pedronaugusto/xenoglyph), for the columns
 text takes in a terminal, and [aegis](https://github.com/pedronaugusto/aegis),
 whose checked scalars are values a command line gives.
+
+## Stability
+
+ensign is 0.x and tracks Zig 0.17.x. A breaking change comes only in a minor release
+(0.3 to 0.4), with a CHANGELOG entry saying what changed and what to write instead; a
+patch release never breaks.
 
 ## Usage
 
