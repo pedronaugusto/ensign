@@ -63,7 +63,7 @@ test "aegis integers are read as integers and checked by their type" {
 }
 
 test "aegis values made by another copy of aegis are read as aegis values" {
-    comptime std.debug.assert(other_aegis.int.Ranged(u16, 1, 256) != Jobs);
+    comptime aegis.assert.invariant(other_aegis.int.Ranged(u16, 1, 256) != Jobs, "the two copies of aegis make distinct types");
     const Other = struct {
         jobs: ?other_aegis.int.Ranged(u16, 1, 4096) = null,
         timeout: other_aegis.units.Duration(.millisecond, u64) = .fromRaw(30_000),
