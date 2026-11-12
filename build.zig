@@ -105,7 +105,7 @@ pub fn dev(b: *std.Build, tools: type) void {
         .hardened = .{ .fuzz_step = "unit", .tsan_step = "unit" },
         .bench = .{
             .programs = &.{ .{ .name = "parse", .source = "bench/parse.zig" }, .{ .name = "complete", .source = "bench/complete.zig" } },
-            .imports = benchImports,
+            .imports = tools.preflight.Bench.importsFrom(benchImports),
             .target = target,
             .optimize = optimize,
         },
