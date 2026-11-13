@@ -59,7 +59,7 @@ const Build = struct {
     };
 };
 
-pub const Tool = struct {
+const Tool = struct {
     color: enum { auto, never } = .auto,
     quiet: bool = false,
     pager: bool = true,

@@ -132,6 +132,7 @@ pub fn terminalWidth(io: std.Io, file: std.Io.File, environ: ?*const std.process
     const tty = file.isTty(io) catch return null;
     if (!tty) return null;
     if (builtin.target.os.tag == .windows) {
+        // glint-ignore: P007 -- the console's width: std reads it on Windows only through this request, as POSIX's through IOCGWINSZ below
         var get = std.os.windows.CONSOLE.USER_IO.GET_SCREEN_BUFFER_INFO;
         const status = get.operate(io, file) catch return null;
         if (status != .SUCCESS or get.Data.dwWindowSize.X <= 0) return null;

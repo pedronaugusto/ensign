@@ -173,7 +173,7 @@ fn lines(node: Node, w: *Writer, name: []const u8) Writer.Error!void {
         var key: [24]u8 = undefined;
         switch (p.kind) {
             .file => try w.writeAll(" -F"),
-            else => try argument(w, p.kind, p.values, name, node.path, std.mem.print(&key, "#{d}", .{n}) catch unreachable), // unreachable: a usize in decimal fits 24 bytes
+            else => try argument(w, p.kind, p.values, name, node.path, std.mem.print(&key, "#{d}", .{n}) catch unreachable), // glint-ignore: Z026 -- a usize in decimal fits 24 bytes
         }
         try w.writeByte('\n');
     }

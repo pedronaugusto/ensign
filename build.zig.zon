@@ -11,14 +11,14 @@
         },
 
         .aegis = .{
-            .url = "git+https://github.com/pedronaugusto/aegis#c8982a86cbd8a85ac9941df59b6c36a10a252355",
-            .hash = "aegis-0.2.4-rsxouvwTDACNY2hXYVwyUefGiHkfV4nV6HBftNXJRliQ",
+            .url = "git+https://github.com/pedronaugusto/aegis#6cce448767870332ee5f148232c9ce74abb20f43",
+            .hash = "aegis-0.2.4-rsxouuBPDQC36fYVqxn_J_M2AYF2LAdZ3IwlF8ApOcf9",
         },
     },
     .dev_dependencies = .{
         .preflight = .{
-            .url = "git+https://github.com/pedronaugusto/preflight?ref=ci-standard#454b12e663bf57993890ba18a06f33df619a659e",
-            .hash = "preflight-0.18.6-LX1ZwhfdGABszxizm4q2gQoTUwWG3UbYWnTZlnuZIxg5",
+            .url = "git+https://github.com/pedronaugusto/preflight?ref=ci-standard#f5cbcc770070fe2fe758ad67ea23e14d94a0b53b",
+            .hash = "preflight-0.18.6-LX1ZwvWUGQCBTNz6Up2PkHIM3fyV5KJwYN-WwpWuU1yL",
         },
 
         .shakedown = .{
