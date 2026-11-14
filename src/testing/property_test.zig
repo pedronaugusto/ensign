@@ -115,9 +115,9 @@ const Writer = struct {
         try w.out.append(w.gpa, try w.cluster.toOwnedSlice(w.gpa));
     }
 
-    /// An option with a value, in one of the four spellings.
+    /// An option with a value, in one of the five spellings.
     fn valued(w: *Writer, long: []const u8, short_name: ?u8, value: []const u8) !void {
-        const form = shake.gen.intRange(w.s, u8, 0, 3);
+        const form = shake.gen.intRange(w.s, u8, 0, 4);
         const c = short_name orelse 0;
         if (form == 0 or c == 0) return w.print("--{s}={s}", .{ long, value });
         if (form == 1) {
@@ -127,6 +127,13 @@ const Writer = struct {
         if (form == 2 or value.len == 0 or value[0] == '=') {
             try w.print("-{c}", .{c});
             return w.arg(value);
+        }
+        if (form == 3) {
+            // `-n=value`, the `=` the parser takes off, after a cluster of flags or alone.
+            try w.short(c);
+            try w.cluster.append(w.gpa, '=');
+            try w.cluster.appendSlice(w.gpa, value);
+            return w.flush();
         }
         // Attached to its letter, after a cluster of flags or alone.
         try w.short(c);
