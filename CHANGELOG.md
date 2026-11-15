@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `stdout` and `stderr`: a program's standard streams as streams, each write after what came before it, so output the shell appends (`>> log`) is appended and two streams sent to one file (`> log 2>&1`) follow each other.
+
+### Fixed
+
+- Help, version, completions and usage errors are written through `stdout` and `stderr`: they were written with std's `File.writer`, which writes a regular file at a position of its own from 0, over what the file held (`tool --help >> notes` lost the notes).
+
 ### Changed
 
 - Pins aegis f52eabe (the aegis line, with `Id.raws`) and xenoglyph main ab4d381, which is on it: the one aegis the family moves to together.

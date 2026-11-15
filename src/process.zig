@@ -80,7 +80,7 @@ pub fn parseOrExit(comptime T: type, init: std.process.Init) T {
         error.OutOfMemory => std.process.fatal("out of memory reading the command line", .{}),
         else => {
             var buffer: [1024]u8 = undefined;
-            var w = std.Io.File.stderr().writer(init.io, &buffer);
+            var w = stderr(init.io, &buffer);
             const width = terminalWidth(init.io, .stderr(), init.environ_map) orelse default_width;
             diagnostic.write(&w.interface, @min(width, max_width)) catch std.process.exit(2);
             w.interface.flush() catch std.process.exit(2);
@@ -91,7 +91,7 @@ pub fn parseOrExit(comptime T: type, init: std.process.Init) T {
         .parsed => |v| return v,
         .help => |h| {
             var buffer: [4096]u8 = undefined;
-            var w = std.Io.File.stdout().writer(init.io, &buffer);
+            var w = stdout(init.io, &buffer);
             const width = terminalWidth(init.io, .stdout(), init.environ_map) orelse default_width;
             h.write(&w.interface, @min(width, max_width)) catch std.process.exit(1);
             w.interface.flush() catch std.process.exit(1);
@@ -99,14 +99,14 @@ pub fn parseOrExit(comptime T: type, init: std.process.Init) T {
         },
         .version => |v| {
             var buffer: [256]u8 = undefined;
-            var w = std.Io.File.stdout().writer(init.io, &buffer);
+            var w = stdout(init.io, &buffer);
             v.write(&w.interface) catch std.process.exit(1);
             w.interface.flush() catch std.process.exit(1);
             std.process.exit(0);
         },
         .complete => |r| {
             var buffer: [4096]u8 = undefined;
-            var w = std.Io.File.stdout().writer(init.io, &buffer);
+            var w = stdout(init.io, &buffer);
             var c = r.completion(init.io, init.arena.allocator(), init.environ_map, &w.interface);
             r.answer(&c) catch |err| switch (err) {
                 error.WriteFailed => std.process.exit(1),
@@ -117,6 +117,26 @@ pub fn parseOrExit(comptime T: type, init: std.process.Init) T {
             std.process.exit(0);
         },
     }
+}
+
+/// Standard output, written as the stream it is: each write goes where the
+/// file stands, after what came before it, so output the shell appends
+/// (`>> log`) is appended, and output that shares a file with standard error
+/// (`> log 2>&1`) follows it in order. std's `File.writer` writes a regular
+/// file at a position of its own, from 0: it overwrote what the file held
+/// and what the other stream wrote. Every write ensign makes goes through
+/// these two, and a program on ensign writes through them.
+pub fn stdout(io: std.Io, buffer: []u8) std.Io.File.Writer {
+    return stream(io, .stdout(), buffer);
+}
+
+/// Standard error, written as a stream: see `stdout`.
+pub fn stderr(io: std.Io, buffer: []u8) std.Io.File.Writer {
+    return stream(io, .stderr(), buffer);
+}
+
+fn stream(io: std.Io, file: std.Io.File, buffer: []u8) std.Io.File.Writer {
+    return .initStreaming(file, io, buffer);
 }
 
 /// The columns of the terminal `file` writes to: `COLUMNS` when the
@@ -149,4 +169,44 @@ test "program names" {
     try std.testing.expectEqualStrings("app", programName("/usr/bin/app"));
     try std.testing.expectEqualStrings("app", programName("app"));
     if (builtin.target.os.tag == .windows) try std.testing.expectEqualStrings("app", programName("C:\\bin\\app.EXE"));
+}
+
+test "what a stream writes to a file opened to append follows what the file held" {
+    if (builtin.target.os.tag == .windows or builtin.target.os.tag == .wasi or builtin.target.os.tag == .freestanding) return error.SkipZigTest;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "log", .data = "first\n" });
+    // as the shell opens it for `>> log`
+    const fd = try std.posix.openat(tmp.dir.handle, "log", .{ .ACCMODE = .WRONLY, .APPEND = true }, 0);
+    const file: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = false } };
+    var buffer: [16]u8 = undefined;
+    var w = stream(io, file, &buffer);
+    try w.interface.writeAll("second\n");
+    try w.interface.flush();
+    file.close(io);
+    var read: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("first\nsecond\n", try tmp.dir.readFile(io, "log", &read));
+}
+
+test "two streams sharing a file write in the order they flush, neither over the other" {
+    if (builtin.target.os.tag == .wasi or builtin.target.os.tag == .freestanding) return error.SkipZigTest;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    // as the shell gives standard output and standard error one file for `> log 2>&1`
+    const file = try tmp.dir.createFile(io, "log", .{});
+    var out_buffer: [16]u8 = undefined;
+    var err_buffer: [16]u8 = undefined;
+    var out = stream(io, file, &out_buffer);
+    var err = stream(io, file, &err_buffer);
+    try out.interface.writeAll("a line\n");
+    try out.interface.flush();
+    try err.interface.writeAll("a warning\n");
+    try err.interface.flush();
+    try out.interface.writeAll("the end\n");
+    try out.interface.flush();
+    file.close(io);
+    var read: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("a line\na warning\nthe end\n", try tmp.dir.readFile(io, "log", &read));
 }
