@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking
+
+- `terminalWidth` returns `Io.Cancelable!?u16`: a cancel that lands while the terminal is asked for its width is `Canceled`, where it was taken for no terminal and the width defaulted. A caller adds a `try`.
+
 ### Added
 
 - `stdout` and `stderr`: a program's standard streams as streams, each write after what came before it, so output the shell appends (`>> log`) is appended and two streams sent to one file (`> log 2>&1`) follow each other.

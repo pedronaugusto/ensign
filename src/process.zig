@@ -81,7 +81,7 @@ pub fn parseOrExit(comptime T: type, init: std.process.Init) T {
         else => {
             var buffer: [1024]u8 = undefined;
             var w = stderr(init.io, &buffer);
-            const width = terminalWidth(init.io, .stderr(), init.environ_map) orelse default_width;
+            const width = (terminalWidth(init.io, .stderr(), init.environ_map) catch std.process.exit(2)) orelse default_width;
             diagnostic.write(&w.interface, @min(width, max_width)) catch std.process.exit(2);
             w.interface.flush() catch std.process.exit(2);
             std.process.exit(2);
@@ -92,7 +92,7 @@ pub fn parseOrExit(comptime T: type, init: std.process.Init) T {
         .help => |h| {
             var buffer: [4096]u8 = undefined;
             var w = stdout(init.io, &buffer);
-            const width = terminalWidth(init.io, .stdout(), init.environ_map) orelse default_width;
+            const width = (terminalWidth(init.io, .stdout(), init.environ_map) catch std.process.exit(1)) orelse default_width;
             h.write(&w.interface, @min(width, max_width)) catch std.process.exit(1);
             w.interface.flush() catch std.process.exit(1);
             std.process.exit(0);
@@ -141,28 +141,42 @@ fn stream(io: std.Io, file: std.Io.File, buffer: []u8) std.Io.File.Writer {
 
 /// The columns of the terminal `file` writes to: `COLUMNS` when the
 /// environment sets it, else what the terminal reports. Null when `file`
-/// is no terminal.
-pub fn terminalWidth(io: std.Io, file: std.Io.File, environ: ?*const std.process.Environ.Map) ?u16 {
+/// is no terminal. A cancel that lands while the terminal is asked is
+/// `Canceled`, never taken for no terminal.
+pub fn terminalWidth(io: std.Io, file: std.Io.File, environ: ?*const std.process.Environ.Map) std.Io.Cancelable!?u16 {
     if (environ) |map| if (map.get("COLUMNS")) |columns| {
         // glint-ignore: Z026 -- a COLUMNS that is no width is not taken: the terminal is asked below
         if (std.fmt.parseInt(u16, columns, 10)) |n| {
             if (n > 0) return n;
         } else |_| {}
     };
-    const tty = file.isTty(io) catch return null;
+    const tty = try file.isTty(io);
     if (!tty) return null;
     if (builtin.target.os.tag == .windows) {
         // glint-ignore: P007 -- the console's width: std reads it on Windows only through this request, as POSIX's through IOCGWINSZ below
         var get = std.os.windows.CONSOLE.USER_IO.GET_SCREEN_BUFFER_INFO;
-        const status = get.operate(io, file) catch return null;
+        const status = try get.operate(io, file);
         if (status != .SUCCESS or get.Data.dwWindowSize.X <= 0) return null;
         return @intCast(get.Data.dwWindowSize.X);
     } else if (@hasDecl(std.posix, "T") and @hasDecl(std.posix.T, "IOCGWINSZ")) {
         var size: std.posix.winsize = .{ .row = 0, .col = 0, .xpixel = 0, .ypixel = 0 };
-        const result = io.operate(.{ .device_io_control = .{ .file = file, .code = std.posix.T.IOCGWINSZ, .arg = &size } }) catch return null;
+        const result = try io.operate(.{ .device_io_control = .{ .file = file, .code = std.posix.T.IOCGWINSZ, .arg = &size } });
         if (result.device_io_control < 0 or size.col == 0) return null;
         return size.col;
     } else return null;
+}
+
+test "a cancel while the terminal is asked for its width is Canceled, not no terminal" {
+    const Canceling = struct {
+        var vtable: std.Io.VTable = undefined;
+        fn isTty(_: ?*anyopaque, _: std.Io.File) std.Io.Cancelable!bool {
+            return error.Canceled;
+        }
+    };
+    Canceling.vtable = std.testing.io.vtable.*;
+    Canceling.vtable.fileIsTty = Canceling.isTty;
+    const io: std.Io = .{ .userdata = std.testing.io.userdata, .vtable = &Canceling.vtable };
+    try std.testing.expectError(error.Canceled, terminalWidth(io, .stdout(), null));
 }
 
 test "program names" {

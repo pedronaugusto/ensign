@@ -342,7 +342,7 @@ UTF-8 as `\xNN`.
 | `writeManPage(T, writer, options)` | Writes the manual page of the command at `options.command`, with its `section`, `date`, `source` and `manual` |
 | `commands(T)` | Every command's path of subcommand names, the root first |
 | `render(T, arena, value)` | The arguments that parse back to `value`, to start a child process with |
-| `terminalWidth(io, file, environ)` | The columns of the terminal a file writes to, or null |
+| `terminalWidth(io, file, environ)` | The columns of the terminal a file writes to, null for no terminal, `Canceled` on a cancel |
 
 ## Scope
 
