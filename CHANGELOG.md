@@ -20,6 +20,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- ensign's own development holds it to the family's policy: `"policy": "family"` in ci/preflight.json, beside the hardened profile ci/workflow.json already declares; the hardened and hardened-tsan legs pass.
 - The development build pins preflight ci-standard 9c18016 and shakedown b99b768, the family's target, where it pinned preflight f991816 and shakedown 327bc61; ci.yml regenerated (`bay dev generate`).
 - Pins aegis f52eabe (the aegis line, with `Id.raws`) and xenoglyph main ab4d381, which is on it: the one aegis the family moves to together.
 - The development build pins preflight ci-standard f991816 and shakedown 327bc61, whose fuzz runner takes the options preflight passes it; ci.yml regenerated (`bay generate`).
