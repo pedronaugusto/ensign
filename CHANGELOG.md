@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-21
+
 ### Breaking
 
 - `terminalWidth` returns `Io.Cancelable!?u16`: a cancel that lands while the terminal is asked for its width is `Canceled`, where it was taken for no terminal and the width defaulted. A caller adds a `try`.
@@ -13,10 +15,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `stdout` and `stderr`: a program's standard streams as streams, each write after what came before it, so output the shell appends (`>> log`) is appended and two streams sent to one file (`> log 2>&1`) follow each other.
-
-### Fixed
-
-- Help, version, completions and usage errors are written through `stdout` and `stderr`: they were written with std's `File.writer`, which writes a regular file at a position of its own from 0, over what the file held (`tool --help >> notes` lost the notes).
 
 ### Changed
 
@@ -28,6 +26,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The README states ensign's stability policy (0.x, tracking Zig 0.17.x; a breaking change only in a minor release, with its CHANGELOG entry; a patch release never breaks), where it said work was in progress.
 - Pins aegis breaking-0.3 (a34e694), the 0.3.0 line the family is on, where it pinned aegis 0.2.1, and on it xenoglyph main (d643260), where it pinned 0.5.1; shakedown main (4979fa9) for the tests. ensign builds on them unchanged.
 - Pins xenoglyph 0.6.1 and aegis 0.4.0.
+
+### Fixed
+
+- Help, version, completions and usage errors are written through `stdout` and `stderr`: they were written with std's `File.writer`, which writes a regular file at a position of its own from 0, over what the file held (`tool --help >> notes` lost the notes).
 
 ## [0.3.1] - 2026-10-27
 
