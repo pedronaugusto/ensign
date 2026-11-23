@@ -169,20 +169,26 @@ const Pieces = struct {
 
     fn next(p: *Pieces) ?Piece {
         while (true) {
-            const start: usize = p.breaks.offset().raw();
-            var end: usize = start;
+            const start = p.breaks.offset();
+            const whole: @TypeOf(start) = .fromRaw(p.line.len);
+            var end = start;
             while (p.breaks.nextSpan()) |span| {
-                end = span.end.raw();
-                if (end == p.line.len or !kept(p.line[end - 1], p.line[end])) break;
+                end = span.end;
+                if (end.eql(whole) or !p.keptAt(end.raw())) break;
             }
-            if (end == start) return null;
-            const raw = p.line[start..end];
+            if (end.eql(start)) return null;
+            const raw = p.line[start.raw()..end.raw()];
             const bytes = std.mem.trim(u8, raw, " ");
             const spaced = p.spaced or (bytes.len != 0 and raw[0] == ' ');
             p.spaced = bytes.len == 0 or raw[raw.len - 1] == ' ';
             if (bytes.len == 0) continue;
             return .{ .bytes = bytes, .spaced = spaced };
         }
+    }
+
+    /// Whether the bytes either side of `at`, a break inside the line, stay together.
+    fn keptAt(p: *const Pieces, at: usize) bool {
+        return kept(p.line[at - 1], p.line[at]);
     }
 
     fn kept(before: u8, after: u8) bool {
